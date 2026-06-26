@@ -1,0 +1,13 @@
+--target=x86_64-w64-windows-gnu
+-fms-extensions
+-fms-compatibility
+-D__GNUC__=11
+-D__x86_64__=1
+-I
+include
+-I
+C:/msys64/mingw64/include
+-I
+C:/msys64/mingw64/x86_64-w64-mingw32/include
+-Wall
+-std=c11
