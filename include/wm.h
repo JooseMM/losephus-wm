@@ -19,3 +19,5 @@ int initialize_state(AppState *state);
 int print_window_title(HWND *hwnd);
 
 int organize_windows(AppState *state);
+
+HWINEVENTHOOK register_focus_hook();
