@@ -6,8 +6,8 @@
 #include "windows.h"
 #include "winnt.h"
 #include "wm.h"
-#include <windows.h>
 #include <dwmapi.h>
+#include <windows.h>
 
 int is_window_visible(HWND hwnd);
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
@@ -46,7 +46,7 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   if (!is_window_visible(hwnd))
     return TRUE;
 
-  if (state->window_ctr >= state->windows_cap) {
+  if (state->window_counter >= state->windows_cap) {
     size_t new_cap = state->windows_cap * 2;
 
     HWND *new_list =
@@ -58,21 +58,33 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
     state->windows_cap = new_cap;
   }
 
-  state->window_list[state->window_ctr] = hwnd;
-  state->window_ctr++;
+  state->window_list[state->window_counter] = hwnd;
+  state->window_counter++;
   return TRUE;
 }
 
-void calculate_workspace_dimensions(int* w, int* h) {
+int initialize_dimensions(AppState *state) {
+  MONITORINFO monitorInfo;
+  monitorInfo.cbSize = sizeof(MONITORINFO);
+
+  HMONITOR hMonitor =
+      MonitorFromWindow(state->window_list[0], MONITOR_DEFAULTTONEAREST);
+  GetMonitorInfo(hMonitor, &monitorInfo);
+
+  // This RECT gives you the screen coordinates minus the Taskbar
+  RECT workArea = monitorInfo.rcWork;
+
+  state->screen_width = workArea.right - workArea.left;
+  state->screen_height = workArea.bottom - workArea.top;
+  state->gap = 10.0f;
+  return 0;
 }
 
 int initialize_state(AppState *state) {
-  state->screen_x = GetSystemMetrics(SM_CXSCREEN);
-  state->screen_y = GetSystemMetrics(SM_CYSCREEN);
-  state->gap = 20;
+  initialize_dimensions(state);
 
   state->windows_cap = 2;
-  state->window_ctr = 0;
+  state->window_counter = 0;
   HWND *new_list = malloc(state->windows_cap * sizeof(HWND));
   if (!new_list)
     return 1;
@@ -95,12 +107,71 @@ int print_window_title(HWND *hwnd) {
 }
 
 int organize_windows(AppState *state) {
-  HWND target = state->window_list[0];
-  if (IsZoomed(target)) {
-    ShowWindow(target, SW_RESTORE);
-  }
+if (state->window_counter == 0) return 0;
 
-  SetWindowPos(target, NULL, 0 + state->gap, 0 + state->gap,
-               state->screen_x - state->gap, state->screen_y - state->gap,
-               SWP_SHOWWINDOW);
+    for (int i = 0; i < state->window_counter; i++) {
+        if (IsZoomed(state->window_list[i])) {
+            ShowWindow(state->window_list[i], SW_RESTORE);
+        }
+    }
+
+    const float gr = 1.618f;
+
+    // Start coordinates fill 100% of the available workspace
+    float rx = 0.0f + state->gap;
+    float ry = 0.0f + state->gap;
+    float rw = (float)state->screen_width - (state->gap * 2.0f);
+    float rh = (float)state->screen_height - (state->gap * 2.0f);
+
+    for (int i = 0; i < state->window_counter; i++) {
+        HWND target = state->window_list[i];
+
+        float win_x = rx;
+        float win_y = ry;
+        float win_w = rw;
+        float win_h = rh;
+
+        if (i < state->window_counter - 1) {
+            if (i % 2 == 0) {
+                // Vertical Split: Cut width by the golden ratio
+                win_w = rw / gr;
+                
+                // Next origin starts exactly where this window ends
+                rx += win_w;
+                rw -= win_w;
+
+		win_w -= state->gap;
+            } 
+            else {
+                // Horizontal Split: Cut height by the golden ratio
+                win_h = rh / gr;
+                
+                // Next origin starts exactly where this window ends
+                ry += win_h;
+                rh -= win_h;
+
+		win_h -= state->gap;
+            }
+        }
+
+        // Apply DWM invisible border compensation so flush windows look correct
+        RECT real_rect, visual_rect;
+        GetWindowRect(target, &real_rect);
+        if (SUCCEEDED(DwmGetWindowAttribute(target, DWMWA_EXTENDED_FRAME_BOUNDS, &visual_rect, sizeof(RECT)))) {
+            int left_padding   = visual_rect.left - real_rect.left;
+            int right_padding  = real_rect.right - visual_rect.right;
+            int bottom_padding = real_rect.bottom - visual_rect.bottom;
+
+            int final_x = (int)win_x - left_padding;
+            int final_y = (int)win_y;
+            int final_w = (int)win_w + left_padding + right_padding;
+            int final_h = (int)win_h + bottom_padding;
+
+            SetWindowPos(target, NULL, final_x, final_y, final_w, final_h, SWP_SHOWWINDOW | SWP_NOZORDER);
+        } else {
+            SetWindowPos(target, NULL, (int)win_x, (int)win_y, (int)win_w, (int)win_h, SWP_SHOWWINDOW | SWP_NOZORDER);
+        }
+    }
+
+    return 0;
 }
