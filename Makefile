@@ -2,7 +2,7 @@
 CC       = gcc
 CFLAGS   = -Wall -Wextra -std=c11 -O2 -Iinclude
 TARGET   = program.exe
-LIBS     = -luser32 -ldwmapi
+LIBS     = -luser32 -ldwmapi -lole32
 
 # 2. Directories
 SRC_DIR  = src

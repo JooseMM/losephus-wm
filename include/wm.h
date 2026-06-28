@@ -1,23 +1,39 @@
+#include <minwindef.h>
 #include <windows.h>
 
-typedef struct {
-  HWND *window_list;
-  int window_counter;
-  int windows_cap;
+enum {
+  WM_ACTION_ORGANIZE = 1,
+  WM_ACTION_QUIT = 2,
+};
 
-  GUID *desktop_list;
-  int desktop_ctr;
-  int desktop_cap;
+typedef struct {
+  struct TrackedWindowNode *window_ll;
 
   float screen_width;
   float screen_height;
   float gap;
 } AppState;
 
+// 1. Structure to pass data safely to the background thread
+typedef struct {
+  AppState *state;
+  int running;
+  DWORD main_thread_id;
+} HotkeyThreadArgs;
+
+
+extern AppState* GLOBAL_APP_STATE_PTR; 
+
+DWORD WINAPI hotkey_tread_proc(LPVOID lpparam);
+void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
+                             HWND hwnd, LONG idObject, LONG idChild,
+                             DWORD dwEventThread, DWORD dwmsEventTime);
+
 int initialize_state(AppState *state);
 
-int print_window_title(HWND *hwnd);
+int print_window_title(HWND hwnd);
 
-int organize_windows(AppState *state);
+int layout_fibonacci(AppState *state);
 
 HWINEVENTHOOK register_focus_hook();
+

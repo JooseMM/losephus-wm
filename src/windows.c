@@ -1,29 +1,46 @@
 #include <stdio.h>
-#include <stdlib.h>
 
 #include "minwindef.h"
+#include "utils.h"
 #include "windef.h"
 #include "windows.h"
 #include "winnt.h"
 #include "wm.h"
 #include <dwmapi.h>
+#include <imm.h>
 #include <windows.h>
 
 int is_window_visible(HWND hwnd);
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
+int get_window_score(HWND hwnd);
 
 int is_window_visible(HWND hwnd) {
   if (!IsWindowVisible(hwnd))
     return 0;
 
-  if (GetWindow(hwnd, GW_OWNER) != NULL)
-    return 0;
-
   if (GetWindowTextLengthW(hwnd) == 0)
     return 0;
 
-  /* Alt-Tab rules to know what to show  */
+  // 1. DIMENSION CHECK: Filter out windows with no actual physical area
+  RECT rect;
+  if (GetWindowRect(hwnd, &rect)) {
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0) {
+      return 0; // It has a title, but it occupies no physical space
+    }
+  }
+
+  // 4. Style Restrictions: Get the standard window style flags
+  LONG style = GetWindowLong(hwnd, GWL_STYLE);
   LONG_PTR ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+
+  // If it's a child window, it belongs inside an app container, don't tile it
+  if (style & WS_CHILD)
+    return 0;
+
+  // Alt-Tab rules: Drop tool windows unless they explicitly want to be app
+  // windows
   int is_tool_window = (ex_style & WS_EX_TOOLWINDOW) != 0;
   int is_app_window = (ex_style & WS_EX_APPWINDOW) != 0;
   if (is_tool_window && !is_app_window)
@@ -43,23 +60,16 @@ int is_window_visible(HWND hwnd) {
 
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   AppState *state = (AppState *)lparam;
+
   if (!is_window_visible(hwnd))
     return TRUE;
 
-  if (state->window_counter >= state->windows_cap) {
-    size_t new_cap = state->windows_cap * 2;
-
-    HWND *new_list =
-        (HWND *)realloc(state->window_list, new_cap * sizeof(HWND));
-    if (!new_list)
-      return FALSE;
-
-    state->window_list = new_list;
-    state->windows_cap = new_cap;
+  // 3. OWNER CHECK: Skip child windows or helper worker utility panels
+  if (GetWindow(hwnd, GW_OWNER) != NULL) {
+    return TRUE;
   }
 
-  state->window_list[state->window_counter] = hwnd;
-  state->window_counter++;
+  append_trackable_window(&state->window_ll, hwnd);
   return TRUE;
 }
 
@@ -67,8 +77,8 @@ int initialize_dimensions(AppState *state) {
   MONITORINFO monitorInfo;
   monitorInfo.cbSize = sizeof(MONITORINFO);
 
-  HMONITOR hMonitor =
-      MonitorFromWindow(state->window_list[0], MONITOR_DEFAULTTONEAREST);
+  HWND first_win = state->window_ll->data;
+  HMONITOR hMonitor = MonitorFromWindow(first_win, MONITOR_DEFAULTTONEAREST);
   GetMonitorInfo(hMonitor, &monitorInfo);
 
   // This RECT gives you the screen coordinates minus the Taskbar
@@ -81,22 +91,21 @@ int initialize_dimensions(AppState *state) {
 }
 
 int initialize_state(AppState *state) {
+  state->window_ll = NULL;
+  EnumWindows(enum_callback, (LPARAM)state);
   initialize_dimensions(state);
 
-  state->windows_cap = 2;
-  state->window_counter = 0;
-  HWND *new_list = malloc(state->windows_cap * sizeof(HWND));
-  if (!new_list)
+  HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+  if (FAILED(hr)) {
+    fprintf(stderr, "Failed to initialize COM.\n");
     return 1;
-
-  state->window_list = new_list;
-  EnumWindows(enum_callback, (LPARAM)state);
+  }
   return 0;
 }
 
-int print_window_title(HWND *hwnd) {
+int print_window_title(HWND hwnd) {
   WCHAR buff[255];
-  int len = GetWindowTextW(*hwnd, buff, 255);
+  int len = GetWindowTextW(hwnd, buff, 255);
   if (len == 0) {
     printf("No Title.");
     return 1;
@@ -106,34 +115,81 @@ int print_window_title(HWND *hwnd) {
   return 0;
 }
 
-int organize_windows(AppState *state) {
-  if (state->window_counter == 0)
-    return 0;
+void sorted_insert(struct TrackedWindowNode **sorted_head_ref,
+                   struct TrackedWindowNode *new_node) {
+  int new_node_score = get_window_score(new_node->data);
 
-  for (int i = 0; i < state->window_counter; i++) {
-    if (IsZoomed(state->window_list[i])) {
-      ShowWindow(state->window_list[i], SW_RESTORE);
-    }
+  if (*sorted_head_ref == NULL ||
+      get_window_score((*sorted_head_ref)->data) >= new_node_score) {
+    new_node->next = *sorted_head_ref;
+    *sorted_head_ref = new_node;
   }
+
+  else {
+    struct TrackedWindowNode *current = *sorted_head_ref;
+
+    while (current->next != NULL &&
+           get_window_score(current->next->data) < new_node_score) {
+      current = current->next;
+    }
+
+    new_node->next = current->next;
+    current->next = new_node;
+  }
+}
+
+void insertion_sort_list(struct TrackedWindowNode **head_ref) {
+  struct TrackedWindowNode *sorted = NULL;
+
+  struct TrackedWindowNode *current = *head_ref;
+  while (current != NULL) {
+    struct TrackedWindowNode *next_node = current->next;
+
+    sorted_insert(&sorted, current);
+
+    current = next_node;
+  }
+
+  *head_ref = sorted;
+}
+
+int get_window_score(HWND hwnd) {
+  RECT rect;
+  if (GetWindowRect(hwnd, &rect)) {
+    return rect.left + rect.top;
+  } else {
+    printf("Failed to get window position. Error: %lu\n", GetLastError());
+    return 10000; // Fallback
+  }
+}
+
+int layout_fibonacci(AppState *state) {
+  if (state->window_ll == NULL)
+    return 0;
 
   const float gr = 1.618f;
 
-  // Start coordinates fill 100% of the available workspace
   float rx = 0.0f + state->gap;
   float ry = 0.0f + state->gap;
   float rw = (float)state->screen_width - (state->gap * 2.0f);
   float rh = (float)state->screen_height - (state->gap * 2.0f);
 
-  for (int i = 0; i < state->window_counter; i++) {
-    HWND target = state->window_list[i];
+  struct TrackedWindowNode *current = state->window_ll;
+  int counter = 0;
+  while (current != NULL) {
+    HWND target = current->data;
+
+    if (IsZoomed(target) || IsIconic(target)) {
+      ShowWindow(target, SW_RESTORE);
+    }
 
     float win_x = rx;
     float win_y = ry;
     float win_w = rw;
     float win_h = rh;
 
-    if (i < state->window_counter - 1) {
-      if (i % 2 == 0) {
+    if (current->next != NULL) {
+      if (counter % 2 == 0) {
         // Vertical Split: Cut width by the golden ratio
         win_w = rw / gr;
 
@@ -174,7 +230,77 @@ int organize_windows(AppState *state) {
       SetWindowPos(target, NULL, (int)win_x, (int)win_y, (int)win_w, (int)win_h,
                    SWP_SHOWWINDOW | SWP_NOZORDER);
     }
+
+    current = current->next;
+    counter++;
   }
 
   return 0;
+}
+
+DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
+  if (lpparam == NULL)
+    return 1;
+  HotkeyThreadArgs *args = (HotkeyThreadArgs *)lpparam;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_ORGANIZE, MOD_ALT, 0x54))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_QUIT, MOD_ALT, 0x51))
+    return 1;
+
+  printf("[Thread] Listening for hotkeys safely...\n");
+
+  MSG msg = {0};
+  while (args->running && GetMessage(&msg, NULL, 0, 0) > 0) {
+    if (msg.message == WM_HOTKEY) {
+      switch (msg.wParam) {
+      case WM_ACTION_ORGANIZE:
+        insertion_sort_list(&args->state->window_ll);
+        layout_fibonacci(args->state);
+        break;
+
+      case WM_ACTION_QUIT:
+        printf("[Thread] Alt+Q intercepted. Requesting termination...\n");
+        args->running = 0;
+        PostThreadMessage(args->main_thread_id, WM_USER, 0, 0);
+        PostQuitMessage(0);
+        break;
+      }
+    }
+  }
+
+  UnregisterHotKey(NULL, WM_ACTION_ORGANIZE);
+  UnregisterHotKey(NULL, WM_ACTION_QUIT);
+  printf("[Thread] Hotkey processing thread stopped cleanly.\n");
+  return 0;
+}
+
+void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
+                             HWND hwnd, LONG idObject, LONG idChild,
+                             DWORD dwEventThread, DWORD dwmsEventTime) {
+  // Filter out non-window objects (like controls, menus, carets, etc.)
+  if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
+    return;
+  }
+
+  // Ensure the HWND is valid
+  if (!hwnd) {
+    return;
+  }
+
+  switch (event) {
+  case EVENT_OBJECT_SHOW: {
+    // Optional: Filter for only main top-level windows (ignores child controls)
+    if (GetParent(hwnd) == NULL && is_window_visible(hwnd)) {
+      printf("Window Created: ");
+      print_window_title(hwnd);
+      append_trackable_window(&GLOBAL_APP_STATE_PTR->window_ll, hwnd);
+    }
+    break;
+  }
+  case EVENT_OBJECT_DESTROY: {
+    remove_trackable_window(&GLOBAL_APP_STATE_PTR->window_ll, hwnd);
+    break;
+  }
+  }
 }
