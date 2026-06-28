@@ -53,3 +53,19 @@ int remove_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd) {
 
   return -1;
 }
+
+int reset_trackable_window(struct TrackedWindowNode **head_ref) {
+  if (*head_ref == NULL)
+    return 1;
+  struct TrackedWindowNode *current = *head_ref;
+  struct TrackedWindowNode *next_node = NULL;
+
+  while (current != NULL) {
+    next_node = current->next; // Keep track of the next node
+    free(current);             // Free the current node
+    current = next_node;       // Move to the next node
+  }
+
+  *head_ref = NULL; // Reset the pointer in your state struct to NULL
+  return 0;
+}

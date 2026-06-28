@@ -1,3 +1,7 @@
+#include <errhandlingapi.h>
+#include <handleapi.h>
+#include <minwinbase.h>
+#include <processthreadsapi.h>
 #include <stdio.h>
 
 #include "minwindef.h"
@@ -13,6 +17,8 @@
 int is_window_visible(HWND hwnd);
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
 int get_window_score(HWND hwnd);
+int open_terminal();
+int reset_state();
 
 int is_window_visible(HWND hwnd) {
   if (!IsWindowVisible(hwnd))
@@ -245,7 +251,13 @@ DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
 
   if (!RegisterHotKey(NULL, WM_ACTION_ORGANIZE, MOD_ALT, 0x54))
     return 1;
-  if (!RegisterHotKey(NULL, WM_ACTION_QUIT, MOD_ALT, 0x51))
+  if (!RegisterHotKey(NULL, WM_ACTION_QUIT, MOD_ALT | MOD_SHIFT, 0x51))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_KILL_WINDOW, MOD_ALT, 0x51))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL, MOD_ALT, 0x0D))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT, 0x52))
     return 1;
 
   printf("[Thread] Listening for hotkeys safely...\n");
@@ -258,12 +270,32 @@ DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
         insertion_sort_list(&args->state->window_ll);
         layout_fibonacci(args->state);
         break;
+      case WM_ACTION_KILL_WINDOW:
+        HWND current_focus = GetForegroundWindow();
+        if (current_focus != NULL) {
+          int res = PostMessage(current_focus, WM_CLOSE, 0, 0);
+          if (!res) {
+            fprintf(
+                stderr,
+                "Error when sending a close signal to the desire window: %lu\n",
+                GetLastError());
+          }
+        }
+        break;
 
       case WM_ACTION_QUIT:
-        printf("[Thread] Alt+Q intercepted. Requesting termination...\n");
         args->running = 0;
         PostThreadMessage(args->main_thread_id, WM_USER, 0, 0);
         PostQuitMessage(0);
+        break;
+
+      case WM_ACTION_OPEN_TERMINAL:
+        open_terminal();
+        break;
+
+      case WM_ACTION_RESET_STATE:
+        reset_trackable_window(&args->state->window_ll);
+        EnumWindows(enum_callback, (LPARAM)args->state);
         break;
       }
     }
@@ -290,10 +322,7 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
 
   switch (event) {
   case EVENT_OBJECT_SHOW: {
-    // Optional: Filter for only main top-level windows (ignores child controls)
     if (GetParent(hwnd) == NULL && is_window_visible(hwnd)) {
-      printf("Window Created: ");
-      print_window_title(hwnd);
       append_trackable_window(&GLOBAL_APP_STATE_PTR->window_ll, hwnd);
     }
     break;
@@ -303,4 +332,29 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
     break;
   }
   }
+}
+
+int open_terminal() {
+  STARTUPINFOW si;
+  PROCESS_INFORMATION pi;
+
+  ZeroMemory(&si, sizeof(si));
+  si.cb = sizeof(si);
+  ZeroMemory(&pi, sizeof(pi));
+
+  si.dwFlags = STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_SHOW;
+
+  wchar_t terminal[] = L"wt.exe";
+
+  BOOL success = CreateProcessW(NULL, terminal, NULL, NULL, FALSE, 0, NULL,
+                                NULL, &si, &pi);
+
+  if (success) {
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+  } else {
+    printf("Failed to open wt.exe. Error: %lu\n", GetLastError());
+  }
+  return 0;
 }

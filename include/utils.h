@@ -8,6 +8,7 @@ struct TrackedWindowNode {
 
 int append_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd);
 int remove_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd);
+int reset_trackable_window(struct TrackedWindowNode **head_ref);
 
 struct TrackedDesktopNode {
   GUID data;
