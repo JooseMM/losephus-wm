@@ -11,6 +11,7 @@ enum {
 
 typedef struct {
   struct TrackedWindowNode *window_ll;
+  int window_counter;
 
   float screen_width;
   float screen_height;

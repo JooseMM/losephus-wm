@@ -9,27 +9,29 @@
 #include "windef.h"
 #include "windows.h"
 #include "winnt.h"
-#include "wm.h"
 #include <dwmapi.h>
 #include <imm.h>
 #include <windows.h>
 
 int is_window_visible(HWND hwnd);
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
-int get_window_score(HWND hwnd);
+int get_window_position_score(HWND hwnd);
 int open_terminal();
 int reset_state();
 
-int is_window_visible(HWND hwnd) {
-  if (!IsWindowVisible(hwnd))
+int is_window_visible(HWND wtarget) {
+  if (!IsWindowVisible(wtarget))
     return 0;
 
-  if (GetWindowTextLengthW(hwnd) == 0)
+  if (GetWindowTextLengthW(wtarget) == 0)
     return 0;
+
+  if(IsIconic(wtarget))
+      return 0;
 
   // 1. DIMENSION CHECK: Filter out windows with no actual physical area
   RECT rect;
-  if (GetWindowRect(hwnd, &rect)) {
+  if (GetWindowRect(wtarget, &rect)) {
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
     if (width <= 0 || height <= 0) {
@@ -38,8 +40,8 @@ int is_window_visible(HWND hwnd) {
   }
 
   // 4. Style Restrictions: Get the standard window style flags
-  LONG style = GetWindowLong(hwnd, GWL_STYLE);
-  LONG_PTR ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+  LONG style = GetWindowLong(wtarget, GWL_STYLE);
+  LONG_PTR ex_style = GetWindowLongPtrW(wtarget, GWL_EXSTYLE);
 
   // If it's a child window, it belongs inside an app container, don't tile it
   if (style & WS_CHILD)
@@ -57,7 +59,7 @@ int is_window_visible(HWND hwnd) {
    * and hidden system panels (like the Windows 11 Quick Settings overlay). */
   int cloaked = 0;
   HRESULT hr =
-      DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+      DwmGetWindowAttribute(wtarget, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
   if (SUCCEEDED(hr) && cloaked != 0)
     return 0;
 
@@ -75,7 +77,7 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
     return TRUE;
   }
 
-  append_trackable_window(&state->window_ll, hwnd);
+  append_trackable_window(state, hwnd);
   return TRUE;
 }
 
@@ -98,6 +100,7 @@ int initialize_dimensions(AppState *state) {
 
 int initialize_state(AppState *state) {
   state->window_ll = NULL;
+  state->window_counter = 0;
   EnumWindows(enum_callback, (LPARAM)state);
   initialize_dimensions(state);
 
@@ -123,25 +126,23 @@ int print_window_title(HWND hwnd) {
 
 void sorted_insert(struct TrackedWindowNode **sorted_head_ref,
                    struct TrackedWindowNode *new_node) {
-  int new_node_score = get_window_score(new_node->data);
+  int new_node_score = get_window_position_score(new_node->data);
 
   if (*sorted_head_ref == NULL ||
-      get_window_score((*sorted_head_ref)->data) >= new_node_score) {
+      get_window_position_score((*sorted_head_ref)->data) >= new_node_score) {
     new_node->next = *sorted_head_ref;
     *sorted_head_ref = new_node;
+    return;
   }
 
-  else {
-    struct TrackedWindowNode *current = *sorted_head_ref;
-
-    while (current->next != NULL &&
-           get_window_score(current->next->data) < new_node_score) {
-      current = current->next;
-    }
-
-    new_node->next = current->next;
-    current->next = new_node;
+  struct TrackedWindowNode *current = *sorted_head_ref;
+  while (current->next != NULL &&
+         get_window_position_score(current->next->data) < new_node_score) {
+    current = current->next;
   }
+
+  new_node->next = current->next;
+  current->next = new_node;
 }
 
 void insertion_sort_list(struct TrackedWindowNode **head_ref) {
@@ -159,7 +160,7 @@ void insertion_sort_list(struct TrackedWindowNode **head_ref) {
   *head_ref = sorted;
 }
 
-int get_window_score(HWND hwnd) {
+int get_window_position_score(HWND hwnd) {
   RECT rect;
   if (GetWindowRect(hwnd, &rect)) {
     return rect.left + rect.top;
@@ -185,7 +186,7 @@ int layout_fibonacci(AppState *state) {
   while (current != NULL) {
     HWND target = current->data;
 
-    if (IsZoomed(target) || IsIconic(target)) {
+    if (IsZoomed(target)) {
       ShowWindow(target, SW_RESTORE);
     }
 
@@ -294,7 +295,7 @@ DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
         break;
 
       case WM_ACTION_RESET_STATE:
-        reset_trackable_window(&args->state->window_ll);
+        reset_trackable_window(args->state);
         EnumWindows(enum_callback, (LPARAM)args->state);
         break;
       }
@@ -321,14 +322,16 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
   }
 
   switch (event) {
-  case EVENT_OBJECT_SHOW: {
+  case EVENT_OBJECT_SHOW:
+  case EVENT_SYSTEM_MINIMIZEEND: {
     if (GetParent(hwnd) == NULL && is_window_visible(hwnd)) {
-      append_trackable_window(&GLOBAL_APP_STATE_PTR->window_ll, hwnd);
+      append_trackable_window(GLOBAL_APP_STATE_PTR, hwnd);
     }
     break;
   }
-  case EVENT_OBJECT_DESTROY: {
-    remove_trackable_window(&GLOBAL_APP_STATE_PTR->window_ll, hwnd);
+  case EVENT_OBJECT_DESTROY:
+  case EVENT_SYSTEM_MINIMIZESTART: {
+    remove_trackable_window(GLOBAL_APP_STATE_PTR, hwnd);
     break;
   }
   }

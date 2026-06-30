@@ -40,7 +40,8 @@ int main() {
 
   // Window Listeners
   HWINEVENTHOOK hhook =
-      SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, NULL,
+      // DESTROY: 0x8001 - SHOW: 0x8002 - MINIMIZE: 0x0016
+      SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_OBJECT_SHOW, NULL,
                       win_event_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
   if (!hhook) {
     DWORD error = GetLastError();

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <windef.h>
 
-int append_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd) {
+int append_trackable_window(AppState *state, HWND hwnd) {
   struct TrackedWindowNode *newNode =
       (struct TrackedWindowNode *)malloc(sizeof(struct TrackedWindowNode));
   if (newNode == NULL) {
@@ -12,34 +12,36 @@ int append_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd) {
   newNode->data = hwnd;
   newNode->next = NULL;
 
-  if (*head_ref == NULL) {
-    *head_ref = newNode;
+  if (state->window_ll == NULL) {
+    state->window_ll = newNode;
+    state->window_counter++;
     return 0;
   }
 
-  struct TrackedWindowNode *current = *head_ref;
+  struct TrackedWindowNode *current = state->window_ll;
   while (current->next != NULL) {
     current = current->next;
   }
 
   current->next = newNode;
-
+  state->window_counter++;
   return 0;
 }
 
-int remove_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd) {
-  if (*head_ref == NULL)
+int remove_trackable_window(AppState *state, HWND hwnd) {
+  if (state->window_ll == NULL)
     return -1;
 
   struct TrackedWindowNode *tmp;
-  if ((*head_ref)->data == hwnd) {
-    tmp = *head_ref;
-    *head_ref = (*head_ref)->next;
+  if (state->window_ll->data == hwnd) {
+    tmp = state->window_ll;
+    state->window_ll = state->window_ll->next;
     free(tmp);
+    state->window_counter--;
     return 0;
   }
 
-  struct TrackedWindowNode *current = *head_ref;
+  struct TrackedWindowNode *current = state->window_ll;
 
   while (current->next != NULL) {
     if (current->next->data == hwnd) {
@@ -54,10 +56,10 @@ int remove_trackable_window(struct TrackedWindowNode **head_ref, HWND hwnd) {
   return -1;
 }
 
-int reset_trackable_window(struct TrackedWindowNode **head_ref) {
-  if (*head_ref == NULL)
+int reset_trackable_window(AppState *state) {
+  if (state->window_ll == NULL)
     return 1;
-  struct TrackedWindowNode *current = *head_ref;
+  struct TrackedWindowNode *current = state->window_ll;
   struct TrackedWindowNode *next_node = NULL;
 
   while (current != NULL) {
@@ -66,6 +68,7 @@ int reset_trackable_window(struct TrackedWindowNode **head_ref) {
     current = next_node;       // Move to the next node
   }
 
-  *head_ref = NULL; // Reset the pointer in your state struct to NULL
+  state->window_ll = NULL; // Reset the pointer in your state struct
+  state->window_counter = 0;
   return 0;
 }
