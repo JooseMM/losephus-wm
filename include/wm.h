@@ -21,6 +21,10 @@ typedef struct {
   struct TrackedWindowNode *window_ll;
   int window_counter;
 
+  GUID *desktop_list;
+  int desktop_count;
+  int desktop_capacity;
+
   float screen_width;
   float screen_height;
   float gap;
@@ -49,5 +53,3 @@ int layout_fibonacci(AppState *state);
 HWINEVENTHOOK register_focus_hook();
 
 int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y);
-
-

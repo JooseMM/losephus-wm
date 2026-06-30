@@ -13,13 +13,13 @@
 #include <imm.h>
 #include <windows.h>
 
-int is_window_visible(HWND hwnd);
+int is_window_usable(HWND hwnd);
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
 int get_window_position_score(HWND hwnd);
 int open_terminal();
 int reset_state();
 
-int is_window_visible(HWND wtarget) {
+int is_window_usable(HWND wtarget) {
   if (!IsWindowVisible(wtarget))
     return 0;
 
@@ -54,22 +54,15 @@ int is_window_visible(HWND wtarget) {
   if (is_tool_window && !is_app_window)
     return 0;
 
-  /*
-   * This instantly catches apps on other Virtual Desktops, suspended UWP apps
-   * and hidden system panels (like the Windows 11 Quick Settings overlay). */
-  int cloaked = 0;
-  HRESULT hr =
-      DwmGetWindowAttribute(wtarget, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-  if (SUCCEEDED(hr) && cloaked != 0)
-    return 0;
-
   return 1;
 }
+
+int is_window_cloaked(HWND hwnd) { return 1; }
 
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   AppState *state = (AppState *)lparam;
 
-  if (!is_window_visible(hwnd))
+  if (!is_window_usable(hwnd))
     return TRUE;
 
   // 3. OWNER CHECK: Skip child windows or helper worker utility panels
@@ -77,7 +70,18 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
     return TRUE;
   }
 
-  append_trackable_window(state, hwnd);
+  append_desktop_from_window(state, hwnd);
+
+  /*
+   * This instantly catches apps on other Virtual Desktops, suspended UWP apps
+   * and hidden system panels (like the Windows 11 Quick Settings overlay). */
+  int cloaked = 0;
+  HRESULT hr =
+      DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+  if (SUCCEEDED(hr) && cloaked == 0) {
+    append_trackable_window(state, hwnd);
+  }
+
   return TRUE;
 }
 
@@ -101,14 +105,27 @@ int initialize_dimensions(AppState *state) {
 int initialize_state(AppState *state) {
   state->window_ll = NULL;
   state->window_counter = 0;
-  EnumWindows(enum_callback, (LPARAM)state);
-  initialize_dimensions(state);
+
+  state->desktop_count = 0;
+  state->desktop_capacity = 5;
 
   HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
   if (FAILED(hr)) {
     fprintf(stderr, "Failed to initialize COM.\n");
     return 1;
   }
+
+  GUID *desktop_list =
+      (GUID *)malloc(sizeof(GUID) * state->desktop_capacity);
+  if (desktop_list == NULL)
+    return 1;
+
+  state->desktop_list = desktop_list;
+
+  EnumWindows(enum_callback, (LPARAM)state);
+
+  initialize_dimensions(state);
+
   return 0;
 }
 
@@ -347,7 +364,7 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
   switch (event) {
   case EVENT_OBJECT_SHOW:
   case EVENT_SYSTEM_MINIMIZEEND: {
-    if (GetParent(hwnd) == NULL && is_window_visible(hwnd)) {
+    if (GetParent(hwnd) == NULL && is_window_usable(hwnd)) {
       append_trackable_window(GLOBAL_APP_STATE_PTR, hwnd);
     }
     break;
