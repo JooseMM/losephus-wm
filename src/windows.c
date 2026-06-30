@@ -26,8 +26,8 @@ int is_window_visible(HWND wtarget) {
   if (GetWindowTextLengthW(wtarget) == 0)
     return 0;
 
-  if(IsIconic(wtarget))
-      return 0;
+  if (IsIconic(wtarget))
+    return 0;
 
   // 1. DIMENSION CHECK: Filter out windows with no actual physical area
   RECT rect;
@@ -261,6 +261,12 @@ DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
   if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT, 0x52))
     return 1;
 
+  // Window Reposition
+  if (!RegisterHotKey(NULL, WM_ACTION_MOVE_UP, MOD_ALT | MOD_SHIFT, 0x4B))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_MOVE_DOWN, MOD_ALT | MOD_SHIFT, 0x4A))
+    return 1;
+
   printf("[Thread] Listening for hotkeys safely...\n");
 
   MSG msg = {0};
@@ -298,6 +304,23 @@ DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
         reset_trackable_window(args->state);
         EnumWindows(enum_callback, (LPARAM)args->state);
         break;
+
+      case WM_ACTION_MOVE_UP: {
+        HWND target = GetForegroundWindow();
+        if (target != NULL) {
+          change_window_position(args->state->window_ll, target, -1);
+          layout_fibonacci(args->state);
+        }
+        break;
+      }
+      case WM_ACTION_MOVE_DOWN: {
+        HWND target = GetForegroundWindow();
+        if (target != NULL) {
+          change_window_position(args->state->window_ll, target, 1);
+          layout_fibonacci(args->state);
+        }
+        break;
+      }
       }
     }
   }
@@ -359,5 +382,39 @@ int open_terminal() {
   } else {
     printf("Failed to open wt.exe. Error: %lu\n", GetLastError());
   }
+  return 0;
+}
+
+int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y) {
+  if (y == 0)
+    return 0;
+
+  struct TrackedWindowNode *prev = NULL;
+  struct TrackedWindowNode *current = head;
+
+  while (current != NULL) {
+    if (current->data == hwnd) {
+      break;
+    }
+
+    prev = current;
+    current = current->next;
+  }
+
+  if (current == NULL)
+    return -1;
+
+  if (y > 0 && current->next != NULL) {
+    HWND tmp = current->data;
+    current->data = current->next->data;
+    current->next->data = tmp;
+  }
+
+  if (y < 0 && prev != NULL) {
+    HWND tmp = current->data;
+    current->data = prev->data;
+    prev->data = tmp;
+  }
+
   return 0;
 }
