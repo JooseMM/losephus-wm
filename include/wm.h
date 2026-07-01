@@ -21,10 +21,6 @@ typedef struct {
   struct TrackedWindowNode *window_ll;
   int window_counter;
 
-  GUID *desktop_list;
-  int desktop_count;
-  int desktop_capacity;
-
   float screen_width;
   float screen_height;
   float gap;

@@ -19,7 +19,6 @@ int main() {
   }
 
   GLOBAL_APP_STATE_PTR = &state;
-  printf("Current amount of desktop: %d", state.desktop_count);
 
   // Allocate safely on the HEAP
   HotkeyThreadArgs *thread_args =

@@ -1,11 +1,11 @@
-#include <stdio.h>
+#include <initguid.h>
 #include "utils.h"
 #include "windows.h"
 #include <combaseapi.h>
 #include <shobjidl.h>
+#include <unknwn.h>
 #include <stdlib.h>
 #include <windef.h>
-
 
 wchar_t *get_desktop_name(HDESK hDesktop) {
   if (hDesktop == NULL)
@@ -32,56 +32,6 @@ wchar_t *get_desktop_name(HDESK hDesktop) {
 
   return name_buffer;
 }
-
-// int append_desktop_from_window(AppState *state, HWND hwnd) {
-//   // Correctly declare variables at the top of the block (Strict C99/C90
-//   // compliance)
-//   HRESULT hr;
-//   IVirtualDesktopManager *pDesktopManager = NULL;
-//   GUID desktopId;
-//   // Create the instance of VirtualDesktopManager
-//   hr =
-//       CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
-//                        &IID_IVirtualDesktopManager, (void **)&pDesktopManager);
-//
-//   if (SUCCEEDED(hr)) {
-//     // Explicitly calling via the manually defined Vtable
-//     hr = pDesktopManager->lpVtbl->GetWindowDesktopId(pDesktopManager, hwnd,
-//                                                      &desktopId);
-//
-//     if (SUCCEEDED(hr)) {
-//       printf("Success! The window is on Virtual Desktop GUID:\n");
-//       PrintGuid(desktopId);
-//     } else {
-//       printf("GetWindowDesktopId failed with error: 0x%08X\n", hr);
-//     }
-//
-//     // Clean up the object
-//     pDesktopManager->lpVtbl->Release(pDesktopManager);
-//   } else {
-//     printf("Failed to create IVirtualDesktopManager instance. Error: 0x%08X\n",
-//            hr);
-//   }
-//
-//   for (int i = 0; i < state->desktop_count; i++) {
-//     if (state->desktop_list[i] == desktopId)
-//       return 0; // If it's present don't do anything
-//   }
-//
-//   if (state->desktop_count >= state->desktop_capacity) {
-//     state->desktop_capacity *= 2;
-//     HDESK *new = (HDESK *)realloc(state->desktop_list,
-//                                   sizeof(HDESK) * state->desktop_capacity);
-//     if (new == NULL)
-//       return -1;
-//
-//     state->desktop_list = new;
-//   }
-//
-//   state->desktop_list[state->desktop_count] = desktop;
-//   state->desktop_count++;
-//   return 0;
-// }
 
 int append_trackable_window(AppState *state, HWND hwnd) {
   struct TrackedWindowNode *newNode =

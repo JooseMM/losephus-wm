@@ -29,7 +29,7 @@ int is_window_usable(HWND wtarget) {
   if (IsIconic(wtarget))
     return 0;
 
-  // 1. DIMENSION CHECK: Filter out windows with no actual physical area
+  // DIMENSION CHECK: Filter out windows with no actual physical area
   RECT rect;
   if (GetWindowRect(wtarget, &rect)) {
     int width = rect.right - rect.left;
@@ -39,7 +39,7 @@ int is_window_usable(HWND wtarget) {
     }
   }
 
-  // 4. Style Restrictions: Get the standard window style flags
+  // Style Restrictions: Get the standard window style flags
   LONG style = GetWindowLong(wtarget, GWL_STYLE);
   LONG_PTR ex_style = GetWindowLongPtrW(wtarget, GWL_EXSTYLE);
 
@@ -54,10 +54,17 @@ int is_window_usable(HWND wtarget) {
   if (is_tool_window && !is_app_window)
     return 0;
 
+  /*
+   * This instantly catches apps on other Virtual Desktops, suspended UWP apps
+   * and hidden system panels (like the Windows 11 Quick Settings overlay). */
+  int cloaked = 0;
+  HRESULT hr =
+      DwmGetWindowAttribute(wtarget, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+  if (SUCCEEDED(hr) && cloaked != 0)
+    return 0;
+
   return 1;
 }
-
-int is_window_cloaked(HWND hwnd) { return 1; }
 
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   AppState *state = (AppState *)lparam;
@@ -65,23 +72,12 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   if (!is_window_usable(hwnd))
     return TRUE;
 
-  // 3. OWNER CHECK: Skip child windows or helper worker utility panels
+  // OWNER CHECK: Skip child windows or helper worker utility panels
   if (GetWindow(hwnd, GW_OWNER) != NULL) {
     return TRUE;
   }
 
-  append_desktop_from_window(state, hwnd);
-
-  /*
-   * This instantly catches apps on other Virtual Desktops, suspended UWP apps
-   * and hidden system panels (like the Windows 11 Quick Settings overlay). */
-  int cloaked = 0;
-  HRESULT hr =
-      DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-  if (SUCCEEDED(hr) && cloaked == 0) {
-    append_trackable_window(state, hwnd);
-  }
-
+  append_trackable_window(state, hwnd);
   return TRUE;
 }
 
@@ -106,21 +102,11 @@ int initialize_state(AppState *state) {
   state->window_ll = NULL;
   state->window_counter = 0;
 
-  state->desktop_count = 0;
-  state->desktop_capacity = 5;
-
   HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
   if (FAILED(hr)) {
     fprintf(stderr, "Failed to initialize COM.\n");
     return 1;
   }
-
-  GUID *desktop_list =
-      (GUID *)malloc(sizeof(GUID) * state->desktop_capacity);
-  if (desktop_list == NULL)
-    return 1;
-
-  state->desktop_list = desktop_list;
 
   EnumWindows(enum_callback, (LPARAM)state);
 
@@ -348,9 +334,10 @@ DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
   return 0;
 }
 
-void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
-                             HWND hwnd, LONG idObject, LONG idChild,
-                             DWORD dwEventThread, DWORD dwmsEventTime) {
+void CALLBACK win_event_proc(
+    __attribute__((unused)) HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
+    LONG idObject, LONG idChild, __attribute__((unused)) DWORD dwEventThread,
+    __attribute__((unused)) DWORD dwmsEventTime) {
   // Filter out non-window objects (like controls, menus, carets, etc.)
   if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
     return;

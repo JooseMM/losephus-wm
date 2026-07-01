@@ -15,5 +15,3 @@ struct TrackedDesktopNode {
   GUID data;
   struct TrackedWindowNode *next;
 };
-
-int append_desktop_from_window(AppState *state, HWND hwnd);
