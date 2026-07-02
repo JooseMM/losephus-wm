@@ -1,7 +1,7 @@
 #include "windef.h"
 #include <minwindef.h>
-#include <windows.h>
 #include <shobjidl.h>
+#include <windows.h>
 
 enum {
   // Window management
@@ -29,10 +29,10 @@ typedef struct {
   int window_count;
 } VirtualDesktop;
 
-
 typedef struct {
   VirtualDesktop desktop_list[9];
   int desktop_count;
+  int desktop_capacity;
 
   float screen_width;
   float screen_height;
@@ -55,7 +55,7 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
 
 int initialize_state(AppState *state);
 
-int get_window_title(HWND hwnd, char* buff, int max);
+int get_window_title(HWND hwnd, char *buff, int max);
 
 int layout_fibonacci(AppState *state);
 
@@ -65,7 +65,9 @@ int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y);
 
 int track_virtual_desktop(AppState *state, HWND hwnd);
 
-int focus_to_title(AppState *state, char* title);
+int focus_to_title(AppState *state, char *title);
 
 void change_focus(HWND hwnd);
 
+int get_desktop_id(HWND hwnd, GUID *buff,
+                   IVirtualDesktopManager *pDesktopManager);

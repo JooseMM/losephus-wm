@@ -26,89 +26,22 @@ typedef struct {
 } HWNDTemp;
 
 int is_window_usable(HWND hwnd);
+
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
+
 int get_window_position_score(HWND hwnd);
+
 int open_terminal();
+
 int reset_state();
+
 int get_desktop_id(HWND hwnd, GUID *buff,
                    IVirtualDesktopManager *pDesktopManager);
 
-int is_window_usable(HWND wtarget) {
-  if (!IsWindowVisible(wtarget))
-    return 0;
+int initialize_dimensions(AppState *state, HWND hwnd);
 
-  if (GetWindowTextLengthW(wtarget) == 0)
-    return 0;
-
-  // DIMENSION CHECK: Filter out windows with no actual physical area
-  RECT rect;
-  if (GetWindowRect(wtarget, &rect)) {
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-    if (width <= 0 || height <= 0) {
-      return 0; // It has a title, but it occupies no physical space
-    }
-  }
-
-  // Style Restrictions: Get the standard window style flags
-  LONG style = GetWindowLong(wtarget, GWL_STYLE);
-  LONG_PTR ex_style = GetWindowLongPtrW(wtarget, GWL_EXSTYLE);
-
-  // If it's a child window, it belongs inside an app container, don't tile it
-  if (style & WS_CHILD)
-    return 0;
-
-  // Alt-Tab rules: Drop tool windows unless they explicitly want to be app
-  // windows
-  int is_tool_window = (ex_style & WS_EX_TOOLWINDOW) != 0;
-  int is_app_window = (ex_style & WS_EX_APPWINDOW) != 0;
-  if (is_tool_window && !is_app_window)
-    return 0;
-
-  return 1;
-}
-
-BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
-  HWNDTemp *temp = (HWNDTemp *)lparam;
-
-  if (!is_window_usable(hwnd))
-    return TRUE;
-
-  // OWNER CHECK: Skip child windows or helper worker utility panels
-  if (GetWindow(hwnd, GW_OWNER) != NULL) {
-    return TRUE;
-  }
-
-  if (temp->counter >= temp->capacity) {
-    temp->capacity *= 2;
-    HWND *tmp_realloc =
-        (HWND *)realloc(temp->arr, sizeof(HWND) * temp->capacity);
-    if (tmp_realloc == NULL)
-      return FALSE;
-
-    temp->arr = tmp_realloc;
-  }
-
-  temp->arr[temp->counter] = hwnd;
-  temp->counter++;
-  return TRUE;
-}
-
-int initialize_dimensions(AppState *state, HWND hwnd) {
-  MONITORINFO monitorInfo;
-  monitorInfo.cbSize = sizeof(MONITORINFO);
-
-  HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-  GetMonitorInfo(hMonitor, &monitorInfo);
-
-  // This RECT gives you the screen coordinates minus the Taskbar
-  RECT workArea = monitorInfo.rcWork;
-
-  state->screen_width = workArea.right - workArea.left;
-  state->screen_height = workArea.bottom - workArea.top;
-  state->gap = 10.0f;
-  return 0;
-}
+void track_uniques_desktops(AppState *state, HWNDTemp *tmp,
+                            IVirtualDesktopManager *vd_manager);
 
 int initialize_state(AppState *state) {
   HWNDTemp hwnd_buffer = {NULL, 0, 20};
@@ -130,6 +63,7 @@ int initialize_state(AppState *state) {
   }
 
   state->desktop_count = 0;
+  state->desktop_capacity = 9;
   memset(state->desktop_list, 0, sizeof(state->desktop_list));
 
   // Create an instance of the VirtualDesktopManager
@@ -144,35 +78,10 @@ int initialize_state(AppState *state) {
     return 1;
   }
 
-  for (int i = 0; i < hwnd_buffer.counter; i++) {
-    GUID buff;
-    get_desktop_id(hwnd_buffer.arr[i], &buff, pDesktopManager);
-
-    int is_present = 0;
-    for (int x = 0; x < state->desktop_count; x++) {
-      if (IsEqualGUID(&buff, &state->desktop_list[x])) {
-        is_present = 1;
-        break;
-      }
-    }
-
-    if(is_present == 0 && state->desktop_count < 9) {
-      VirtualDesktop vp = { buff, NULL };
-      state->desktop_list[state->desktop_count] = vp ;
-      state->desktop_count++;
-    }
-  }
+  track_uniques_desktops(state, &hwnd_buffer, pDesktopManager);
 
   // Release the COM object (again, via the vtable)
   pDesktopManager->lpVtbl->Release(pDesktopManager);
-  return 0;
-}
-
-int get_window_title(HWND hwnd, char *buff, int max) {
-  int len = GetWindowTextA(hwnd, buff, max);
-  if (len == 0) {
-    return 1;
-  }
   return 0;
 }
 
@@ -212,17 +121,7 @@ void insertion_sort_list(struct TrackedWindowNode **head_ref) {
   *head_ref = sorted;
 }
 
-int get_window_position_score(HWND hwnd) {
-  RECT rect;
-  if (GetWindowRect(hwnd, &rect)) {
-    return rect.left + rect.top;
-  } else {
-    printf("Failed to get window position. Error: %lu\n", GetLastError());
-    return 10000; // Fallback
-  }
-}
-
-int layout_fibonacci(AppState *state) {
+int layout_fibonacci(__attribute__((unused)) AppState *state) {
   // if (state->window_ll == NULL)
   //   return 0;
   //
@@ -298,7 +197,7 @@ int layout_fibonacci(AppState *state) {
   return 0;
 }
 
-DWORD WINAPI hotkey_tread_proc(LPVOID lpparam) {
+DWORD WINAPI hotkey_tread_proc(__attribute__((unused)) LPVOID lpparam) {
   // if (lpparam == NULL)
   //   return 1;
   // HotkeyThreadArgs *args = (HotkeyThreadArgs *)lpparam;
@@ -402,15 +301,160 @@ void CALLBACK win_event_proc(
   case EVENT_OBJECT_SHOW:
   case EVENT_SYSTEM_MINIMIZEEND: {
     if (GetParent(hwnd) == NULL && is_window_usable(hwnd)) {
-      start_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+      // start_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
     }
     break;
   }
   case EVENT_OBJECT_DESTROY:
   case EVENT_SYSTEM_MINIMIZESTART: {
-    stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+    // stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
     break;
   }
+  }
+}
+
+int get_desktop_id(HWND hwnd, GUID *buff,
+                   IVirtualDesktopManager *pDesktopManager) {
+  memset(buff, 0, sizeof(GUID));
+  GUID desktop_id = {0};
+
+  // Call GetWindowDesktopId using the C vtable structure
+  HRESULT hr = pDesktopManager->lpVtbl->GetWindowDesktopId(pDesktopManager,
+                                                           hwnd, &desktop_id);
+
+  if (!SUCCEEDED(hr))
+    return 1;
+
+  if (IsEqualGUID(&desktop_id, &GUID_NULL)) {
+    return 1;
+  }
+
+  *buff = desktop_id;
+  return 0;
+}
+
+void change_focus(HWND hwnd) {
+  // Get the thread that currently "owns" the foreground
+  HWND currentForeground = GetForegroundWindow();
+  DWORD foregroundThreadId =
+      currentForeground ? GetWindowThreadProcessId(currentForeground, NULL) : 0;
+
+  // Get our own thread ID
+  DWORD myThreadId = GetCurrentThreadId();
+
+  // If we aren't the foreground thread, we must "attach" to it to steal focus
+  // rights
+  if (foregroundThreadId != myThreadId && foregroundThreadId != 0) {
+    AttachThreadInput(foregroundThreadId, myThreadId, TRUE);
+
+    // Bring window to top and force focus
+    BringWindowToTop(hwnd);
+    SetForegroundWindow(hwnd);
+    SetFocus(hwnd);
+
+    // Detach
+    AttachThreadInput(foregroundThreadId, myThreadId, FALSE);
+  } else {
+    // We already have foreground rights
+    BringWindowToTop(hwnd);
+    SetForegroundWindow(hwnd);
+    SetFocus(hwnd);
+  }
+}
+
+/* utils */
+int is_window_usable(HWND wtarget) {
+  if (!IsWindowVisible(wtarget))
+    return 0;
+
+  if (GetWindowTextLengthW(wtarget) == 0)
+    return 0;
+
+  // DIMENSION CHECK: Filter out windows with no actual physical area
+  RECT rect;
+  if (GetWindowRect(wtarget, &rect)) {
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0) {
+      return 0; // It has a title, but it occupies no physical space
+    }
+  }
+
+  // Style Restrictions: Get the standard window style flags
+  LONG style = GetWindowLong(wtarget, GWL_STYLE);
+  LONG_PTR ex_style = GetWindowLongPtrW(wtarget, GWL_EXSTYLE);
+
+  // If it's a child window, it belongs inside an app container, don't tile it
+  if (style & WS_CHILD)
+    return 0;
+
+  // Alt-Tab rules: Drop tool windows unless they explicitly want to be app
+  // windows
+  int is_tool_window = (ex_style & WS_EX_TOOLWINDOW) != 0;
+  int is_app_window = (ex_style & WS_EX_APPWINDOW) != 0;
+  if (is_tool_window && !is_app_window)
+    return 0;
+
+  return 1;
+}
+
+BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
+  HWNDTemp *temp = (HWNDTemp *)lparam;
+
+  if (!is_window_usable(hwnd))
+    return TRUE;
+
+  // OWNER CHECK: Skip child windows or helper worker utility panels
+  if (GetWindow(hwnd, GW_OWNER) != NULL) {
+    return TRUE;
+  }
+
+  if (temp->counter >= temp->capacity) {
+    temp->capacity *= 2;
+    HWND *tmp_realloc =
+        (HWND *)realloc(temp->arr, sizeof(HWND) * temp->capacity);
+    if (tmp_realloc == NULL)
+      return FALSE;
+
+    temp->arr = tmp_realloc;
+  }
+
+  temp->arr[temp->counter] = hwnd;
+  temp->counter++;
+  return TRUE;
+}
+
+int initialize_dimensions(AppState *state, HWND hwnd) {
+  MONITORINFO monitorInfo;
+  monitorInfo.cbSize = sizeof(MONITORINFO);
+
+  HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+  GetMonitorInfo(hMonitor, &monitorInfo);
+
+  // This RECT gives you the screen coordinates minus the Taskbar
+  RECT workArea = monitorInfo.rcWork;
+
+  state->screen_width = workArea.right - workArea.left;
+  state->screen_height = workArea.bottom - workArea.top;
+  state->gap = 10.0f;
+  return 0;
+}
+
+int get_window_title(HWND hwnd, char *buff, int max) {
+  int len = GetWindowTextA(hwnd, buff, max);
+  if (len == 0) {
+    return 1;
+  }
+  return 0;
+}
+
+int get_window_position_score(HWND hwnd) {
+  RECT rect;
+  if (GetWindowRect(hwnd, &rect)) {
+    return rect.left + rect.top;
+  } else {
+    printf("Failed to get window position. Error: %lu\n", GetLastError());
+    return 10000; // Fallback
   }
 }
 
@@ -473,53 +517,39 @@ int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y) {
   return 0;
 }
 
-int get_desktop_id(HWND hwnd, GUID *buff,
-                   IVirtualDesktopManager *pDesktopManager) {
-  memset(buff, 0, sizeof(GUID));
-  GUID desktop_id = {0};
+void track_uniques_desktops(AppState *state, HWNDTemp *tmp,
+                            IVirtualDesktopManager *vd_manager) {
+  for (int i = 0; i < tmp->counter; i++) {
+    GUID buff;
+    int found_id = get_desktop_id(tmp->arr[i], &buff, vd_manager);
+    if (found_id == 1)
+      continue;
 
-  // Call GetWindowDesktopId using the C vtable structure
-  HRESULT hr = pDesktopManager->lpVtbl->GetWindowDesktopId(pDesktopManager,
-                                                           hwnd, &desktop_id);
+    int index_of = -1;
+    for (int x = 0; x < state->desktop_count; x++) {
+      if (IsEqualGUID(&buff, &state->desktop_list[x])) {
+        index_of = x;
+        break;
+      }
+    }
 
-  if (!SUCCEEDED(hr)) {
-    printf("GetWindowDesktopId failed. Error: 0x%08lX\n", hr);
-    return 1;
-  }
+    if (index_of != -1) {
+      if (start_tracking_window(&state->desktop_list[index_of], tmp->arr[i]) ==
+          1) {
+        printf("OS is unable to give the necessary memory for allocation\n");
+      }
+    } else if (index_of == -1 &&
+               state->desktop_count < state->desktop_capacity) {
+      state->desktop_list[state->desktop_count] =
+          (VirtualDesktop){buff, NULL, 0};
+      ;
 
-  if (IsEqualGUID(&desktop_id, &GUID_NULL)) {
-    return 1;
-  }
+      if (start_tracking_window(&state->desktop_list[state->desktop_count],
+                                tmp->arr[i]) == 1) {
+        printf("OS is unable to give the necessary memory for allocation\n");
+      }
 
-  *buff = desktop_id;
-  return 0;
-}
-
-void change_focus(HWND hwnd) {
-  // Get the thread that currently "owns" the foreground
-  HWND currentForeground = GetForegroundWindow();
-  DWORD foregroundThreadId =
-      currentForeground ? GetWindowThreadProcessId(currentForeground, NULL) : 0;
-
-  // Get our own thread ID
-  DWORD myThreadId = GetCurrentThreadId();
-
-  // If we aren't the foreground thread, we must "attach" to it to steal focus
-  // rights
-  if (foregroundThreadId != myThreadId && foregroundThreadId != 0) {
-    AttachThreadInput(foregroundThreadId, myThreadId, TRUE);
-
-    // Bring window to top and force focus
-    BringWindowToTop(hwnd);
-    SetForegroundWindow(hwnd);
-    SetFocus(hwnd);
-
-    // Detach
-    AttachThreadInput(foregroundThreadId, myThreadId, FALSE);
-  } else {
-    // We already have foreground rights
-    BringWindowToTop(hwnd);
-    SetForegroundWindow(hwnd);
-    SetFocus(hwnd);
+      state->desktop_count++;
+    }
   }
 }

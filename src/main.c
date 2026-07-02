@@ -19,6 +19,14 @@ int main() {
     return 1;
   }
 
+  for (int i = 0; i < state.desktop_count; i++) {
+    printf("For desktop #%d there is %d windows\n", i, state.desktop_list[i].window_count);
+    char buff[255];
+    if(get_window_title(state.desktop_list[i].window_head->data, buff, 255) != 1) {
+	printf("First window is: %s\n", buff);
+    }
+  }
+
   // GLOBAL_APP_STATE_PTR = &state;
   //
   // focus_to_title(&state, "Explorer");
@@ -48,7 +56,8 @@ int main() {
   //                     win_event_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
   // if (!hhook) {
   //   DWORD error = GetLastError();
-  //   fprintf(stderr, "Failed to register hook! Error code: %lu (0x%lX)\n", error,
+  //   fprintf(stderr, "Failed to register hook! Error code: %lu (0x%lX)\n",
+  //   error,
   //           error);
   //   return 1;
   // }
@@ -62,15 +71,15 @@ int main() {
   // }
   //
   // // 4. Cleanup Sequence
-  // printf("[Main] Cleaning up components...\n");
+  printf("[Main] Cleaning up components...\n");
   // UnhookWinEvent(hhook);
   //
   // // Force background thread out of its blocking GetMessage
   // PostThreadMessage(GetThreadId(thread), WM_QUIT, 0, 0);
   // WaitForSingleObject(thread, INFINITE);
   // CloseHandle(thread);
-  // CoUninitialize();
-  //
+  CoUninitialize();
+
   // free(thread_args);
   return 0;
 }
