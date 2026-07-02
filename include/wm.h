@@ -1,6 +1,7 @@
 #include "windef.h"
 #include <minwindef.h>
 #include <windows.h>
+#include <shobjidl.h>
 
 enum {
   // Window management
@@ -17,9 +18,21 @@ enum {
   WM_ACTION_MOVE_LEFT,
 };
 
+struct TrackedWindowNode {
+  HWND data;
+  struct TrackedWindowNode *next;
+};
+
 typedef struct {
-  struct TrackedWindowNode *window_ll;
-  int window_counter;
+  GUID desktop_id;
+  struct TrackedWindowNode *window_head;
+  int window_count;
+} VirtualDesktop;
+
+
+typedef struct {
+  VirtualDesktop desktop_list[9];
+  int desktop_count;
 
   float screen_width;
   float screen_height;
@@ -42,10 +55,17 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
 
 int initialize_state(AppState *state);
 
-int print_window_title(HWND hwnd);
+int get_window_title(HWND hwnd, char* buff, int max);
 
 int layout_fibonacci(AppState *state);
 
 HWINEVENTHOOK register_focus_hook();
 
 int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y);
+
+int track_virtual_desktop(AppState *state, HWND hwnd);
+
+int focus_to_title(AppState *state, char* title);
+
+void change_focus(HWND hwnd);
+

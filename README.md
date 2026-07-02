@@ -1,5 +1,5 @@
 # TODO
-- Add support for position change through key shortcuts
+- Implement an Array of LinkedList data structure to define desktop groups
 
 ## Low Priority
 - Add support for changing position trought drag and drop;

@@ -1,39 +1,16 @@
-#include <initguid.h>
 #include "utils.h"
-#include "windows.h"
 #include <combaseapi.h>
+#include <initguid.h>
 #include <shobjidl.h>
-#include <unknwn.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <unknwn.h>
 #include <windef.h>
+#include <winnt.h>
 
-wchar_t *get_desktop_name(HDESK hDesktop) {
-  if (hDesktop == NULL)
-    return NULL;
+#include <shlwapi.h> // Make sure to link -lshlwapi in your Makefile
 
-  DWORD needed_size = 0;
-
-  // 1. Get the required buffer size
-  GetUserObjectInformationW(hDesktop, UOI_NAME, NULL, 0, &needed_size);
-  if (needed_size == 0)
-    return NULL;
-
-  // 2. Allocate the buffer
-  wchar_t *name_buffer = (wchar_t *)malloc(needed_size);
-  if (name_buffer == NULL)
-    return NULL;
-
-  // 3. Populate the buffer with the name
-  if (!GetUserObjectInformationW(hDesktop, UOI_NAME, name_buffer, needed_size,
-                                 &needed_size)) {
-    free(name_buffer);
-    return NULL;
-  }
-
-  return name_buffer;
-}
-
-int append_trackable_window(AppState *state, HWND hwnd) {
+int start_tracking_window(AppState *state, HWND hwnd) {
   struct TrackedWindowNode *newNode =
       (struct TrackedWindowNode *)malloc(sizeof(struct TrackedWindowNode));
   if (newNode == NULL) {
@@ -45,7 +22,7 @@ int append_trackable_window(AppState *state, HWND hwnd) {
 
   if (state->window_ll == NULL) {
     state->window_ll = newNode;
-    state->window_counter++;
+    state->window_count++;
     return 0;
   }
 
@@ -55,11 +32,11 @@ int append_trackable_window(AppState *state, HWND hwnd) {
   }
 
   current->next = newNode;
-  state->window_counter++;
+  state->window_count++;
   return 0;
 }
 
-int remove_trackable_window(AppState *state, HWND hwnd) {
+int stop_tracking_window(AppState *state, HWND hwnd) {
   if (state->window_ll == NULL)
     return -1;
 
@@ -68,7 +45,7 @@ int remove_trackable_window(AppState *state, HWND hwnd) {
     tmp = state->window_ll;
     state->window_ll = state->window_ll->next;
     free(tmp);
-    state->window_counter--;
+    state->window_count--;
     return 0;
   }
 
@@ -87,7 +64,7 @@ int remove_trackable_window(AppState *state, HWND hwnd) {
   return -1;
 }
 
-int reset_trackable_window(AppState *state) {
+int reset_all_tracking_window(AppState *state) {
   if (state->window_ll == NULL)
     return 1;
   struct TrackedWindowNode *current = state->window_ll;
@@ -100,6 +77,51 @@ int reset_trackable_window(AppState *state) {
   }
 
   state->window_ll = NULL; // Reset the pointer in your state struct
-  state->window_counter = 0;
+  state->window_count = 0;
+  return 0;
+}
+
+int append_unique_desktop(AppState *state, GUID *desktop_id) {
+  for (int i = 0; i < state->desktop_count; i++) {
+    if (IsEqualGUID(&state->desktop_list[i], desktop_id)) {
+      return 0;
+    }
+  }
+
+  if (state->desktop_count >= state->desktop_capacity) {
+    state->desktop_capacity *= 2;
+
+    GUID *temp = (GUID *)realloc(state->desktop_list,
+                                 sizeof(GUID) * state->desktop_capacity);
+    if (temp == NULL)
+      return 1;
+
+    state->desktop_list = temp;
+  }
+
+  state->desktop_list[state->desktop_count] = *desktop_id;
+  state->desktop_count++;
+  return 0;
+}
+
+int focus_to_title(AppState *state, char *title) {
+  struct TrackedWindowNode *current = state->window_ll;
+  int cap = 255;
+  char buff[cap];
+
+  while (current != NULL) {
+    int is_ok = get_window_title(current->data, buff, cap);
+    printf("Comparing %s to %s\n", buff, title);
+    if (is_ok == 0 && StrStrIA(buff, title) != NULL) {
+      break;
+    }
+    current = current->next;
+  }
+
+  if (current == NULL)
+    return 1;
+
+  change_focus(current->data);
+
   return 0;
 }

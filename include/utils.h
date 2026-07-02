@@ -2,16 +2,9 @@
 #include <windef.h>
 #include <winnt.h>
 
-struct TrackedWindowNode {
-  HWND data;
-  struct TrackedWindowNode *next;
-};
+int start_tracking_window(AppState *state, HWND hwnd);
+int stop_tracking_window(AppState *state, HWND hwnd);
+int reset_all_tracking_window(AppState *state);
 
-int append_trackable_window(AppState *state, HWND hwnd);
-int remove_trackable_window(AppState *state, HWND hwnd);
-int reset_trackable_window(AppState *state);
+int append_unique_desktop(AppState *state, GUID *desktop_id);
 
-struct TrackedDesktopNode {
-  GUID data;
-  struct TrackedWindowNode *next;
-};
