@@ -1,3 +1,4 @@
 *.exe
+program.exe
 build
 build/*.*

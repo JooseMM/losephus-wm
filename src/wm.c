@@ -27,21 +27,14 @@ typedef struct {
 
 int is_window_usable(HWND hwnd);
 
-BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
-
 int get_window_position_score(HWND hwnd);
-
-int open_terminal();
-
-int reset_state();
 
 int get_desktop_id(HWND hwnd, GUID *buff,
                    IVirtualDesktopManager *pDesktopManager);
 
 int initialize_dimensions(AppState *state, HWND hwnd);
 
-void track_uniques_desktops(AppState *state, HWNDTemp *tmp,
-                            IVirtualDesktopManager *vd_manager);
+void track_uniques_desktops(AppState *state, HWNDTemp *tmp);
 
 int initialize_state(AppState *state) {
   HWNDTemp hwnd_buffer = {NULL, 0, 20};
@@ -62,10 +55,10 @@ int initialize_state(AppState *state) {
   memset(state->desktop_list, 0, sizeof(state->desktop_list));
 
   // Create an instance of the VirtualDesktopManager
-  IVirtualDesktopManager *pDesktopManager = NULL;
+  IVirtualDesktopManager *desktop_manager = NULL;
   HRESULT hr =
       CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
-                       &IID_IVirtualDesktopManager, (void **)&pDesktopManager);
+                       &IID_IVirtualDesktopManager, (void **)&desktop_manager);
 
   if (!SUCCEEDED(hr)) {
     printf("Failed to create IVirtualDesktopManager instance. Error: 0x%08lX\n",
@@ -73,14 +66,14 @@ int initialize_state(AppState *state) {
     return 1;
   }
 
-  track_uniques_desktops(state, &hwnd_buffer, pDesktopManager);
+  state->desktop_manager = desktop_manager;
 
-  if(hwnd_buffer.counter > 0) {
-   state->desktop_active_index = 0;
+  track_uniques_desktops(state, &hwnd_buffer);
+
+  if (hwnd_buffer.counter > 0) {
+    state->desktop_active_index = 0;
   }
 
-  // Release the COM object (again, via the vtable)
-  pDesktopManager->lpVtbl->Release(pDesktopManager);
   return 0;
 }
 
@@ -112,8 +105,11 @@ void insertion_sort_list(struct TrackedWindowNode **head_ref) {
   while (current != NULL) {
     struct TrackedWindowNode *next_node = current->next;
 
-    sorted_insert(&sorted, current);
+    if (IsZoomed(current->data)) {
+      ShowWindow(current->data, SW_SHOWNORMAL);
+    }
 
+    sorted_insert(&sorted, current);
     current = next_node;
   }
 
@@ -133,13 +129,10 @@ int layout_fibonacci(AppState *state) {
 
   struct TrackedWindowNode *current =
       state->desktop_list[state->desktop_active_index].window_head;
+
   int counter = 0;
   while (current != NULL) {
     HWND target = current->data;
-
-    if (IsZoomed(target)) {
-      ShowWindow(target, SW_RESTORE);
-    }
 
     float win_x = rx;
     float win_y = ry;
@@ -192,7 +185,6 @@ int layout_fibonacci(AppState *state) {
     current = current->next;
     counter++;
   }
-
   return 0;
 }
 
@@ -214,15 +206,27 @@ void CALLBACK win_event_proc(
   case EVENT_OBJECT_SHOW:
   case EVENT_SYSTEM_MINIMIZEEND: {
     if (GetParent(hwnd) == NULL && is_window_usable(hwnd)) {
-      printf("new windows!");
-      // start_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+      Sleep(20); // sleep to allow the OS to catch up
+      GUID desktop_id;
+      if (get_desktop_id(hwnd, &desktop_id,
+                         GLOBAL_APP_STATE_PTR->desktop_manager) == 1) {
+        break;
+      }
+      int found_index = find_tracked_desktop(GLOBAL_APP_STATE_PTR, &desktop_id);
+      if (found_index == -1) {
+        break;
+      }
+
+      if (start_tracking_window(
+              &GLOBAL_APP_STATE_PTR->desktop_list[found_index], hwnd) == 1) {
+        break;
+      }
     }
     break;
   }
   case EVENT_OBJECT_DESTROY:
   case EVENT_SYSTEM_MINIMIZESTART: {
-      printf("destroy windows!");
-    // stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+    stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
     break;
   }
   }
@@ -237,8 +241,10 @@ int get_desktop_id(HWND hwnd, GUID *buff,
   HRESULT hr = pDesktopManager->lpVtbl->GetWindowDesktopId(pDesktopManager,
                                                            hwnd, &desktop_id);
 
-  if (!SUCCEEDED(hr))
+  if (!SUCCEEDED(hr)) {
+    // printf("Failed with HRESULT: 0x%08X\n", (unsigned int)hr);
     return 1;
+  }
 
   if (IsEqualGUID(&desktop_id, &GUID_NULL)) {
     return 1;
@@ -432,11 +438,10 @@ int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y) {
   return 0;
 }
 
-void track_uniques_desktops(AppState *state, HWNDTemp *tmp,
-                            IVirtualDesktopManager *vd_manager) {
+void track_uniques_desktops(AppState *state, HWNDTemp *tmp) {
   for (int i = 0; i < tmp->counter; i++) {
     GUID buff;
-    int found_id = get_desktop_id(tmp->arr[i], &buff, vd_manager);
+    int found_id = get_desktop_id(tmp->arr[i], &buff, state->desktop_manager);
     if (found_id == 1)
       continue;
 

@@ -10,7 +10,7 @@
 #include <windef.h>
 #include <windows.h>
 
-static AppState *g_AppState = NULL;
+AppState *GLOBAL_APP_STATE_PTR = NULL;
 
 int main() {
   AppState state;
@@ -27,25 +27,22 @@ int main() {
     return 1;
   }
 
-  g_AppState = &state;
+  GLOBAL_APP_STATE_PTR = &state;
 
   // 1. Register your Hotkey
-  if (register) {
+  if (register_hotkeys() == 1) {
     fprintf(stderr, "[Main] Hotkey registration failed. %lu\n", GetLastError());
     CoUninitialize();
     return 1;
   }
 
-  // 2. Register for Windows Events (e.g., listening for foreground window
-  // changes)
+  // Register for Windows Events
   HWINEVENTHOOK hEventHook = SetWinEventHook(
-      EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_DESTROY, // Event range
-      NULL,           // Handle to DLL (NULL for out-of-context)
-      win_event_proc, // Your callback function
-      0, 0,           // Process ID and Thread ID (0 = all)
+      // SHOW: 0x8002 - MINIMIZEEND: 0x0017 - DESTROY: 0x8001 - MINIMIZESTART:
+      // 0x0016
+      EVENT_SYSTEM_MINIMIZESTART, EVENT_OBJECT_SHOW, NULL, win_event_proc, 0, 0,
       WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
-  // FIX 2: Check if the hook actually succeeded
   if (hEventHook == NULL) {
     fprintf(stderr, "[Main] WinEventHook registration failed. %lu\n",
             GetLastError());
@@ -59,59 +56,74 @@ int main() {
 
   MSG msg = {0};
   while (GetMessage(&msg, NULL, 0, 0)) {
-      switch (msg.wParam) {
-      case WM_ACTION_ORGANIZE:
-        // insertion_sort_list(&args->state->window_ll);
-        // layout_fibonacci(args->state);
-        break;
-      case WM_ACTION_KILL_WINDOW:
-        HWND current_focus = GetForegroundWindow();
-        if (current_focus != NULL) {
-          int res = PostMessage(current_focus, WM_CLOSE, 0, 0);
-          if (!res) {
-            fprintf(
-                stderr,
-                "Error when sending a close signal to the desire window:%lu\n",
-                GetLastError());
-          }
+    switch (msg.wParam) {
+    case WM_ACTION_ORGANIZE:
+      VirtualDesktop vd = state.desktop_list[state.desktop_active_index];
+      insertion_sort_list(&vd.window_head);
+      layout_fibonacci(&state);
+      break;
+    case WM_ACTION_KILL_WINDOW:
+      HWND current_focus = GetForegroundWindow();
+      if (current_focus != NULL) {
+        int res = PostMessage(current_focus, WM_CLOSE, 0, 0);
+        if (!res) {
+          fprintf(
+              stderr,
+              "Error when sending a close signal to the desire window:%lu\n",
+              GetLastError());
         }
-        break;
-
-      case WM_ACTION_QUIT:
-        PostQuitMessage(0);
-        break;
-
-      case WM_ACTION_OPEN_TERMINAL:
-        break;
-
-      case WM_ACTION_RESET_STATE:
-        // reset_all_tracking_window(args->state);
-        // EnumWindows(enum_callback, (LPARAM)args->state);
-        break;
-
-      case WM_ACTION_MOVE_UP: {
-        // HWND target = GetForegroundWindow();
-        // if (target != NULL) {
-        //   change_window_position(args->state->window_ll, target, -1);
-        //   layout_fibonacci(args->state);
-        // }
-        break;
       }
-      case WM_ACTION_MOVE_DOWN: {
-        HWND target = GetForegroundWindow();
-        if (target != NULL) {
-          // change_window_position(args->state->window_ll, target, 1);
-          // layout_fibonacci(args->state);
-        }
-        break;
+      break;
+
+    case WM_ACTION_QUIT:
+      PostQuitMessage(0);
+      break;
+
+    case WM_ACTION_OPEN_TERMINAL:
+      open_terminal();
+      break;
+
+    case WM_ACTION_MOVE_UP: {
+      HWND target = GetForegroundWindow();
+      if (target != NULL) {
+        struct TrackedWindowNode *whead =
+            state.desktop_list[state.desktop_active_index].window_head;
+        change_window_position(whead, target, -1);
+        layout_fibonacci(&state);
       }
+      break;
+    }
+    case WM_ACTION_MOVE_DOWN: {
+      HWND target = GetForegroundWindow();
+      if (target != NULL) {
+        struct TrackedWindowNode *whead =
+            state.desktop_list[state.desktop_active_index].window_head;
+        change_window_position(whead, target, 1);
+        layout_fibonacci(&state);
       }
+      break;
+    }
+    case WM_ACTION_FOCUS_DESKTOP_1: {
+      if (state.desktop_count > 0)
+        change_focus(state.desktop_list[0].window_head->data);
+
+      break;
+    }
+    case WM_ACTION_FOCUS_DESKTOP_2: {
+      if (state.desktop_count > 1)
+        change_focus(state.desktop_list[1].window_head->data);
+
+      break;
+    }
+    }
     // Windows Events are dispatched to WinEventProc here automatically
     TranslateMessage(&msg);
     DispatchMessage(&msg);
   }
 
   // Cleanup
+  state.desktop_manager->lpVtbl->Release(state.desktop_manager);
+  unregister_hotkeys();
   UnhookWinEvent(hEventHook);
   UnregisterHotKey(NULL, WM_ACTION_QUIT);
   CoUninitialize();
@@ -137,10 +149,17 @@ int register_hotkeys() {
   if (!RegisterHotKey(NULL, WM_ACTION_MOVE_DOWN, MOD_ALT | MOD_SHIFT, 0x4A))
     return 1;
 
+  // Desktops
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_1, MOD_ALT, 0x31))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_2, MOD_ALT, 0x32))
+    return 1;
+
   return 0;
 }
 
-int unregister_hotkeys() {
+void unregister_hotkeys() {
   UnregisterHotKey(NULL, WM_ACTION_ORGANIZE);
   UnregisterHotKey(NULL, WM_ACTION_QUIT);
   UnregisterHotKey(NULL, WM_ACTION_KILL_WINDOW);
@@ -148,6 +167,6 @@ int unregister_hotkeys() {
   UnregisterHotKey(NULL, WM_ACTION_MOVE_UP);
   UnregisterHotKey(NULL, WM_ACTION_RESET_STATE);
   UnregisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL);
-
-  return 0;
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_1);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_2);
 }
