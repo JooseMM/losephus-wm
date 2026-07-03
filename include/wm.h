@@ -33,10 +33,12 @@ typedef struct {
   VirtualDesktop desktop_list[9];
   int desktop_count;
   int desktop_capacity;
+  int desktop_active_index;
 
   float screen_width;
   float screen_height;
   float gap;
+
 } AppState;
 
 // 1. Structure to pass data safely to the background thread

@@ -50,12 +50,6 @@ int initialize_state(AppState *state) {
   if (hwnd_buffer.arr == NULL)
     return 1;
 
-  HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-  if (FAILED(hr)) {
-    fprintf(stderr, "Failed to initialize COM.\n");
-    return 1;
-  }
-
   EnumWindows(enum_callback, (LPARAM)&hwnd_buffer);
 
   if (hwnd_buffer.counter > 0) {
@@ -64,11 +58,12 @@ int initialize_state(AppState *state) {
 
   state->desktop_count = 0;
   state->desktop_capacity = 9;
+  state->desktop_active_index = -1;
   memset(state->desktop_list, 0, sizeof(state->desktop_list));
 
   // Create an instance of the VirtualDesktopManager
   IVirtualDesktopManager *pDesktopManager = NULL;
-  hr =
+  HRESULT hr =
       CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
                        &IID_IVirtualDesktopManager, (void **)&pDesktopManager);
 
@@ -79,6 +74,10 @@ int initialize_state(AppState *state) {
   }
 
   track_uniques_desktops(state, &hwnd_buffer, pDesktopManager);
+
+  if(hwnd_buffer.counter > 0) {
+   state->desktop_active_index = 0;
+  }
 
   // Release the COM object (again, via the vtable)
   pDesktopManager->lpVtbl->Release(pDesktopManager);
@@ -121,165 +120,79 @@ void insertion_sort_list(struct TrackedWindowNode **head_ref) {
   *head_ref = sorted;
 }
 
-int layout_fibonacci(__attribute__((unused)) AppState *state) {
-  // if (state->window_ll == NULL)
-  //   return 0;
-  //
-  // const float gr = 1.618f;
-  //
-  // float rx = 0.0f + state->gap;
-  // float ry = 0.0f + state->gap;
-  // float rw = (float)state->screen_width - (state->gap * 2.0f);
-  // float rh = (float)state->screen_height - (state->gap * 2.0f);
-  //
-  // struct TrackedWindowNode *current = state->window_ll;
-  // int counter = 0;
-  // while (current != NULL) {
-  //   HWND target = current->data;
-  //
-  //   if (IsZoomed(target)) {
-  //     ShowWindow(target, SW_RESTORE);
-  //   }
-  //
-  //   float win_x = rx;
-  //   float win_y = ry;
-  //   float win_w = rw;
-  //   float win_h = rh;
-  //
-  //   if (current->next != NULL) {
-  //     if (counter % 2 == 0) {
-  //       // Vertical Split: Cut width by the golden ratio
-  //       win_w = rw / gr;
-  //
-  //       // Next origin starts exactly where this window ends
-  //       rx += win_w;
-  //       rw -= win_w;
-  //
-  //       win_w -= state->gap;
-  //     } else {
-  //       // Horizontal Split: Cut height by the golden ratio
-  //       win_h = rh / gr;
-  //
-  //       // Next origin starts exactly where this window ends
-  //       ry += win_h;
-  //       rh -= win_h;
-  //
-  //       win_h -= state->gap;
-  //     }
-  //   }
-  //
-  //   // Apply DWM invisible border compensation so flush windows look correct
-  //   RECT real_rect, visual_rect;
-  //   GetWindowRect(target, &real_rect);
-  //   if (SUCCEEDED(DwmGetWindowAttribute(target, DWMWA_EXTENDED_FRAME_BOUNDS,
-  //                                       &visual_rect, sizeof(RECT)))) {
-  //     int left_padding = visual_rect.left - real_rect.left;
-  //     int right_padding = real_rect.right - visual_rect.right;
-  //     int bottom_padding = real_rect.bottom - visual_rect.bottom;
-  //
-  //     int final_x = (int)win_x - left_padding;
-  //     int final_y = (int)win_y;
-  //     int final_w = (int)win_w + left_padding + right_padding;
-  //     int final_h = (int)win_h + bottom_padding;
-  //
-  //     SetWindowPos(target, NULL, final_x, final_y, final_w, final_h,
-  //                  SWP_SHOWWINDOW | SWP_NOZORDER);
-  //   } else {
-  //     SetWindowPos(target, NULL, (int)win_x, (int)win_y, (int)win_w,
-  //     (int)win_h,
-  //                  SWP_SHOWWINDOW | SWP_NOZORDER);
-  //   }
-  //
-  //   current = current->next;
-  //   counter++;
-  // }
+int layout_fibonacci(AppState *state) {
+  if (state->desktop_count == 0 || state->desktop_active_index == -1)
+    return 0;
 
-  return 0;
-}
+  const float gr = 1.618f;
 
-DWORD WINAPI hotkey_tread_proc(__attribute__((unused)) LPVOID lpparam) {
-  // if (lpparam == NULL)
-  //   return 1;
-  // HotkeyThreadArgs *args = (HotkeyThreadArgs *)lpparam;
-  //
-  // if (!RegisterHotKey(NULL, WM_ACTION_ORGANIZE, MOD_ALT, 0x54))
-  //   return 1;
-  // if (!RegisterHotKey(NULL, WM_ACTION_QUIT, MOD_ALT | MOD_SHIFT, 0x51))
-  //   return 1;
-  // if (!RegisterHotKey(NULL, WM_ACTION_KILL_WINDOW, MOD_ALT, 0x51))
-  //   return 1;
-  // if (!RegisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL, MOD_ALT, 0x0D))
-  //   return 1;
-  // if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT, 0x52))
-  //   return 1;
-  //
-  // // Window Reposition
-  // if (!RegisterHotKey(NULL, WM_ACTION_MOVE_UP, MOD_ALT | MOD_SHIFT, 0x4B))
-  //   return 1;
-  // if (!RegisterHotKey(NULL, WM_ACTION_MOVE_DOWN, MOD_ALT | MOD_SHIFT, 0x4A))
-  //   return 1;
-  //
-  // printf("[Thread] Listening for hotkeys safely...\n");
-  //
-  // MSG msg = {0};
-  // while (args->running && GetMessage(&msg, NULL, 0, 0) > 0) {
-  //   if (msg.message == WM_HOTKEY) {
-  //     switch (msg.wParam) {
-  //     case WM_ACTION_ORGANIZE:
-  //       insertion_sort_list(&args->state->window_ll);
-  //       layout_fibonacci(args->state);
-  //       break;
-  //     case WM_ACTION_KILL_WINDOW:
-  //       HWND current_focus = GetForegroundWindow();
-  //       if (current_focus != NULL) {
-  //         int res = PostMessage(current_focus, WM_CLOSE, 0, 0);
-  //         if (!res) {
-  //           fprintf(
-  //               stderr,
-  //               "Error when sending a close signal to the desire window:
-  //               %lu\n", GetLastError());
-  //         }
-  //       }
-  //       break;
-  //
-  //     case WM_ACTION_QUIT:
-  //       args->running = 0;
-  //       PostThreadMessage(args->main_thread_id, WM_USER, 0, 0);
-  //       PostQuitMessage(0);
-  //       break;
-  //
-  //     case WM_ACTION_OPEN_TERMINAL:
-  //       open_terminal();
-  //       break;
-  //
-  //     case WM_ACTION_RESET_STATE:
-  //       reset_all_tracking_window(args->state);
-  //       EnumWindows(enum_callback, (LPARAM)args->state);
-  //       break;
-  //
-  //     case WM_ACTION_MOVE_UP: {
-  //       HWND target = GetForegroundWindow();
-  //       if (target != NULL) {
-  //         change_window_position(args->state->window_ll, target, -1);
-  //         layout_fibonacci(args->state);
-  //       }
-  //       break;
-  //     }
-  //     case WM_ACTION_MOVE_DOWN: {
-  //       HWND target = GetForegroundWindow();
-  //       if (target != NULL) {
-  //         change_window_position(args->state->window_ll, target, 1);
-  //         layout_fibonacci(args->state);
-  //       }
-  //       break;
-  //     }
-  //     }
-  //   }
-  // }
-  //
-  // UnregisterHotKey(NULL, WM_ACTION_ORGANIZE);
-  // UnregisterHotKey(NULL, WM_ACTION_QUIT);
-  // printf("[Thread] Hotkey processing thread stopped cleanly.\n");
+  float rx = 0.0f + state->gap;
+  float ry = 0.0f + state->gap;
+  float rw = (float)state->screen_width - (state->gap * 2.0f);
+  float rh = (float)state->screen_height - (state->gap * 2.0f);
+
+  struct TrackedWindowNode *current =
+      state->desktop_list[state->desktop_active_index].window_head;
+  int counter = 0;
+  while (current != NULL) {
+    HWND target = current->data;
+
+    if (IsZoomed(target)) {
+      ShowWindow(target, SW_RESTORE);
+    }
+
+    float win_x = rx;
+    float win_y = ry;
+    float win_w = rw;
+    float win_h = rh;
+
+    if (current->next != NULL) {
+      if (counter % 2 == 0) {
+        // Vertical Split: Cut width by the golden ratio
+        win_w = rw / gr;
+
+        // Next origin starts exactly where this window ends
+        rx += win_w;
+        rw -= win_w;
+
+        win_w -= state->gap;
+      } else {
+        // Horizontal Split: Cut height by the golden ratio
+        win_h = rh / gr;
+
+        // Next origin starts exactly where this window ends
+        ry += win_h;
+        rh -= win_h;
+
+        win_h -= state->gap;
+      }
+    }
+
+    // Apply DWM invisible border compensation so flush windows look correct
+    RECT real_rect, visual_rect;
+    GetWindowRect(target, &real_rect);
+    if (SUCCEEDED(DwmGetWindowAttribute(target, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                        &visual_rect, sizeof(RECT)))) {
+      int left_padding = visual_rect.left - real_rect.left;
+      int right_padding = real_rect.right - visual_rect.right;
+      int bottom_padding = real_rect.bottom - visual_rect.bottom;
+
+      int final_x = (int)win_x - left_padding;
+      int final_y = (int)win_y;
+      int final_w = (int)win_w + left_padding + right_padding;
+      int final_h = (int)win_h + bottom_padding;
+
+      SetWindowPos(target, NULL, final_x, final_y, final_w, final_h,
+                   SWP_SHOWWINDOW | SWP_NOZORDER);
+    } else {
+      SetWindowPos(target, NULL, (int)win_x, (int)win_y, (int)win_w, (int)win_h,
+                   SWP_SHOWWINDOW | SWP_NOZORDER);
+    }
+
+    current = current->next;
+    counter++;
+  }
+
   return 0;
 }
 
@@ -301,12 +214,14 @@ void CALLBACK win_event_proc(
   case EVENT_OBJECT_SHOW:
   case EVENT_SYSTEM_MINIMIZEEND: {
     if (GetParent(hwnd) == NULL && is_window_usable(hwnd)) {
+      printf("new windows!");
       // start_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
     }
     break;
   }
   case EVENT_OBJECT_DESTROY:
   case EVENT_SYSTEM_MINIMIZESTART: {
+      printf("destroy windows!");
     // stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
     break;
   }

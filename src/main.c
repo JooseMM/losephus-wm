@@ -10,76 +10,144 @@
 #include <windef.h>
 #include <windows.h>
 
-AppState *GLOBAL_APP_STATE_PTR = NULL;
+static AppState *g_AppState = NULL;
 
 int main() {
   AppState state;
-  if (initialize_state(&state) == 1) {
-    fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
+
+  HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+  if (FAILED(hr)) {
+    fprintf(stderr, "Failed to initialize COM.\n");
     return 1;
   }
 
-  for (int i = 0; i < state.desktop_count; i++) {
-    printf("For desktop #%d there is %d windows\n", i, state.desktop_list[i].window_count);
-    char buff[255];
-    if(get_window_title(state.desktop_list[i].window_head->data, buff, 255) != 1) {
-	printf("First window is: %s\n", buff);
-    }
+  if (initialize_state(&state) == 1) {
+    fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
+    CoUninitialize();
+    return 1;
   }
 
-  // GLOBAL_APP_STATE_PTR = &state;
-  //
-  // focus_to_title(&state, "Explorer");
-  //
-  // // Allocate safely on the HEAP
-  // HotkeyThreadArgs *thread_args =
-  //     (HotkeyThreadArgs *)malloc(sizeof(HotkeyThreadArgs));
-  // if (thread_args == NULL) {
-  //   fprintf(stderr, "[Main] Out of memory.\n");
-  //   return 1;
-  // }
-  // thread_args->state = &state;
-  // thread_args->running = 1;
-  //
-  // // Hotkey worker thread
-  // HANDLE thread =
-  //     CreateThread(NULL, 0, hotkey_tread_proc, thread_args, 0, NULL);
-  // if (thread == NULL) {
-  //   free(thread_args);
-  //   return 1;
-  // }
-  //
-  // // Window Listeners
-  // HWINEVENTHOOK hhook =
-  //     // DESTROY: 0x8001 - SHOW: 0x8002 - MINIMIZE: 0x0016
-  //     SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_OBJECT_SHOW, NULL,
-  //                     win_event_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
-  // if (!hhook) {
-  //   DWORD error = GetLastError();
-  //   fprintf(stderr, "Failed to register hook! Error code: %lu (0x%lX)\n",
-  //   error,
-  //           error);
-  //   return 1;
-  // }
-  //
-  // printf("[Main] Listening for Window Creation/Destruction...\n");
-  // thread_args->main_thread_id = GetCurrentThreadId();
-  // MSG msg = {0};
-  // while (thread_args->running && GetMessage(&msg, NULL, 0, 0) > 0) {
-  //   TranslateMessage(&msg);
-  //   DispatchMessage(&msg);
-  // }
-  //
-  // // 4. Cleanup Sequence
-  printf("[Main] Cleaning up components...\n");
-  // UnhookWinEvent(hhook);
-  //
-  // // Force background thread out of its blocking GetMessage
-  // PostThreadMessage(GetThreadId(thread), WM_QUIT, 0, 0);
-  // WaitForSingleObject(thread, INFINITE);
-  // CloseHandle(thread);
+  g_AppState = &state;
+
+  // 1. Register your Hotkey
+  if (register) {
+    fprintf(stderr, "[Main] Hotkey registration failed. %lu\n", GetLastError());
+    CoUninitialize();
+    return 1;
+  }
+
+  // 2. Register for Windows Events (e.g., listening for foreground window
+  // changes)
+  HWINEVENTHOOK hEventHook = SetWinEventHook(
+      EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_DESTROY, // Event range
+      NULL,           // Handle to DLL (NULL for out-of-context)
+      win_event_proc, // Your callback function
+      0, 0,           // Process ID and Thread ID (0 = all)
+      WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+
+  // FIX 2: Check if the hook actually succeeded
+  if (hEventHook == NULL) {
+    fprintf(stderr, "[Main] WinEventHook registration failed. %lu\n",
+            GetLastError());
+    UnregisterHotKey(NULL, WM_ACTION_QUIT);
+    CoUninitialize();
+    return 1;
+  }
+
+  printf("Listening for Hotkeys and Window Events... Press Alt+Shift+Q to "
+         "exit.\n");
+
+  MSG msg = {0};
+  while (GetMessage(&msg, NULL, 0, 0)) {
+      switch (msg.wParam) {
+      case WM_ACTION_ORGANIZE:
+        // insertion_sort_list(&args->state->window_ll);
+        // layout_fibonacci(args->state);
+        break;
+      case WM_ACTION_KILL_WINDOW:
+        HWND current_focus = GetForegroundWindow();
+        if (current_focus != NULL) {
+          int res = PostMessage(current_focus, WM_CLOSE, 0, 0);
+          if (!res) {
+            fprintf(
+                stderr,
+                "Error when sending a close signal to the desire window:%lu\n",
+                GetLastError());
+          }
+        }
+        break;
+
+      case WM_ACTION_QUIT:
+        PostQuitMessage(0);
+        break;
+
+      case WM_ACTION_OPEN_TERMINAL:
+        break;
+
+      case WM_ACTION_RESET_STATE:
+        // reset_all_tracking_window(args->state);
+        // EnumWindows(enum_callback, (LPARAM)args->state);
+        break;
+
+      case WM_ACTION_MOVE_UP: {
+        // HWND target = GetForegroundWindow();
+        // if (target != NULL) {
+        //   change_window_position(args->state->window_ll, target, -1);
+        //   layout_fibonacci(args->state);
+        // }
+        break;
+      }
+      case WM_ACTION_MOVE_DOWN: {
+        HWND target = GetForegroundWindow();
+        if (target != NULL) {
+          // change_window_position(args->state->window_ll, target, 1);
+          // layout_fibonacci(args->state);
+        }
+        break;
+      }
+      }
+    // Windows Events are dispatched to WinEventProc here automatically
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+  }
+
+  // Cleanup
+  UnhookWinEvent(hEventHook);
+  UnregisterHotKey(NULL, WM_ACTION_QUIT);
   CoUninitialize();
 
-  // free(thread_args);
+  return 0;
+}
+
+int register_hotkeys() {
+  if (!RegisterHotKey(NULL, WM_ACTION_ORGANIZE, MOD_ALT, 0x54))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_QUIT, MOD_ALT | MOD_SHIFT, 0x51))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_KILL_WINDOW, MOD_ALT, 0x51))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL, MOD_ALT, 0x0D))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT, 0x52))
+    return 1;
+
+  // Window Reposition
+  if (!RegisterHotKey(NULL, WM_ACTION_MOVE_UP, MOD_ALT | MOD_SHIFT, 0x4B))
+    return 1;
+  if (!RegisterHotKey(NULL, WM_ACTION_MOVE_DOWN, MOD_ALT | MOD_SHIFT, 0x4A))
+    return 1;
+
+  return 0;
+}
+
+int unregister_hotkeys() {
+  UnregisterHotKey(NULL, WM_ACTION_ORGANIZE);
+  UnregisterHotKey(NULL, WM_ACTION_QUIT);
+  UnregisterHotKey(NULL, WM_ACTION_KILL_WINDOW);
+  UnregisterHotKey(NULL, WM_ACTION_MOVE_DOWN);
+  UnregisterHotKey(NULL, WM_ACTION_MOVE_UP);
+  UnregisterHotKey(NULL, WM_ACTION_RESET_STATE);
+  UnregisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL);
+
   return 0;
 }
