@@ -50,7 +50,6 @@ enum {
   WM_ACTION_FOCUS_DESKTOP_2,
 };
 
-
 // 1. Structure to pass data safely to the background thread
 typedef struct {
   AppState *state;
@@ -91,3 +90,5 @@ void unregister_hotkeys();
 int open_terminal();
 
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
+
+int reset_all(AppState *state);

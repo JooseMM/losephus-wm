@@ -70,6 +70,7 @@ int initialize_state(AppState *state) {
 
   track_uniques_desktops(state, &hwnd_buffer);
 
+  state->desktop_active_index = -1;
   if (hwnd_buffer.counter > 0) {
     state->desktop_active_index = 0;
   }

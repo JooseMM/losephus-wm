@@ -76,27 +76,33 @@ int stop_tracking_window(AppState *state, HWND hwnd) {
   return -1;
 }
 
-// int reset_all_tracking_window(AppState *state) {
-//   for (int i = 0; i < state->desktop_count; i++) {
-//     VirtualDesktop vd = state->desktop_list[i];
-//
-//     if (vd->window_head == NULL)
-//       return 1;
-//
-//     struct TrackedWindowNode *current = vd->window_head;
-//     struct TrackedWindowNode *next_node = NULL;
-//
-//     while (current != NULL) {
-//       next_node = current->next; // Keep track of the next node
-//       free(current);             // Free the current node
-//       current = next_node;       // Move to the next node
-//     }
-//
-//     vd->window_head = NULL; // Reset the pointer in your state struct
-//     vd->window_count = 0;
-//   }
-//   return 0;
-// }
+int reset_all(AppState *state) {
+  for (int i = 0; i < state->desktop_count; i++) {
+    VirtualDesktop vd = state->desktop_list[i];
+
+    if (vd.window_head == NULL)
+      return 1;
+
+    struct TrackedWindowNode *current = vd.window_head;
+    struct TrackedWindowNode *next_node = NULL;
+
+    while (current != NULL) {
+      next_node = current->next; // Keep track of the next node
+      free(current);             // Free the current node
+      current = next_node;       // Move to the next node
+    }
+
+    vd.window_head = NULL; // Reset the pointer in your state struct
+    vd.window_count = 0;
+    memset(&state->desktop_list[i], 0, sizeof(VirtualDesktop));
+  }
+
+  state->screen_width = 0;
+  state->screen_height = 0;
+  state->desktop_count = 0;
+
+  return initialize_state(state);
+}
 
 // int focus_to_title(AppState *state, char *title) {
 //   struct TrackedWindowNode *current = state->window_ll;

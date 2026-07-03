@@ -115,6 +115,12 @@ int main() {
 
       break;
     }
+    case WM_ACTION_RESET_STATE: {
+      if (reset_all(&state)) {
+        fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
+        CoUninitialize();
+      }
+    }
     }
     // Windows Events are dispatched to WinEventProc here automatically
     TranslateMessage(&msg);
@@ -140,7 +146,7 @@ int register_hotkeys() {
     return 1;
   if (!RegisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL, MOD_ALT, 0x0D))
     return 1;
-  if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT, 0x52))
+  if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT | MOD_SHIFT, 0x52))
     return 1;
 
   // Window Reposition
