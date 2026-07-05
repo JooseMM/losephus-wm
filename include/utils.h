@@ -8,3 +8,5 @@ int stop_tracking_window(AppState *state, HWND hwnd);
 int append_unique_desktop(AppState *state, GUID *desktop_id);
 int find_tracked_desktop(AppState *state, GUID *id);
 
+
+int should_exclude(HWND hwnd);

@@ -2,13 +2,13 @@
 #include <combaseapi.h>
 #include <initguid.h>
 #include <shobjidl.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <unknwn.h>
 #include <windef.h>
 #include <winnt.h>
 
-#include <shlwapi.h> // Make sure to link -lshlwapi in your Makefile
+#include <shlwapi.h>
+#define EXCLUDE_LIST_COUNT 2
 
 int start_tracking_window(VirtualDesktop *vd, HWND hwnd) {
   struct TrackedWindowNode *newNode =
@@ -101,27 +101,22 @@ int reset_all(AppState *state) {
   state->screen_height = 0;
   state->desktop_count = 0;
 
-  return initialize_state(state);
+  return 0;
 }
 
-// int focus_to_title(AppState *state, char *title) {
-//   struct TrackedWindowNode *current = state->window_ll;
-//   int cap = 255;
-//   char buff[cap];
-//
-//   while (current != NULL) {
-//     int is_ok = get_window_title(current->data, buff, cap);
-//     printf("Comparing %s to %s\n", buff, title);
-//     if (is_ok == 0 && StrStrIA(buff, title) != NULL) {
-//       break;
-//     }
-//     current = current->next;
-//   }
-//
-//   if (current == NULL)
-//     return 1;
-//
-//   change_focus(current->data);
-//
-//   return 0;
-// }
+int should_exclude(HWND hwnd) {
+ char exclude_list[EXCLUDE_LIST_COUNT][255] = { 
+  "Picture in Picture",
+  "Picture-in-Picture"
+ };
+ char buff[500];
+
+ if(get_window_title(hwnd, buff, 500) == 1)
+   return 1;
+
+ for(int i = 0; i < EXCLUDE_LIST_COUNT; i++) {
+  if(StrStrIA(exclude_list[i], buff) != NULL) return 1;
+ }
+
+ return 0;
+}

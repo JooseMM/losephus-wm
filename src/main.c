@@ -59,8 +59,8 @@ int main() {
     switch (msg.wParam) {
     case WM_ACTION_ORGANIZE:
       VirtualDesktop vd = state.desktop_list[state.desktop_active_index];
-      insertion_sort_list(&vd.window_head);
-      layout_fibonacci(&state);
+      sort_linked_list(&vd.window_head);
+      apply_fibonacci_layout(&state);
       break;
     case WM_ACTION_KILL_WINDOW:
       HWND current_focus = GetForegroundWindow();
@@ -89,7 +89,7 @@ int main() {
         struct TrackedWindowNode *whead =
             state.desktop_list[state.desktop_active_index].window_head;
         change_window_position(whead, target, -1);
-        layout_fibonacci(&state);
+        apply_fibonacci_layout(&state);
       }
       break;
     }
@@ -99,7 +99,7 @@ int main() {
         struct TrackedWindowNode *whead =
             state.desktop_list[state.desktop_active_index].window_head;
         change_window_position(whead, target, 1);
-        layout_fibonacci(&state);
+        apply_fibonacci_layout(&state);
       }
       break;
     }
@@ -115,12 +115,12 @@ int main() {
 
       break;
     }
-    case WM_ACTION_RESET_STATE: {
-      if (reset_all(&state)) {
-        fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
-        CoUninitialize();
-      }
-    }
+    // case WM_ACTION_RESET_STATE: {
+    //   if (reset_all(&state)) {
+    //     fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
+    //     CoUninitialize();
+    //   }
+    // }
     }
     // Windows Events are dispatched to WinEventProc here automatically
     TranslateMessage(&msg);
@@ -146,8 +146,8 @@ int register_hotkeys() {
     return 1;
   if (!RegisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL, MOD_ALT, 0x0D))
     return 1;
-  if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT | MOD_SHIFT, 0x52))
-    return 1;
+  // if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT | MOD_SHIFT, 0x52))
+  //   return 1;
 
   // Window Reposition
   if (!RegisterHotKey(NULL, WM_ACTION_MOVE_UP, MOD_ALT | MOD_SHIFT, 0x4B))
@@ -171,7 +171,7 @@ void unregister_hotkeys() {
   UnregisterHotKey(NULL, WM_ACTION_KILL_WINDOW);
   UnregisterHotKey(NULL, WM_ACTION_MOVE_DOWN);
   UnregisterHotKey(NULL, WM_ACTION_MOVE_UP);
-  UnregisterHotKey(NULL, WM_ACTION_RESET_STATE);
+  // UnregisterHotKey(NULL, WM_ACTION_RESET_STATE);
   UnregisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL);
   UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_1);
   UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_2);

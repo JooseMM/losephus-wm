@@ -32,29 +32,11 @@ int get_window_position_score(HWND hwnd);
 int get_desktop_id(HWND hwnd, GUID *buff,
                    IVirtualDesktopManager *pDesktopManager);
 
-int initialize_dimensions(AppState *state, HWND hwnd);
+int set_screen_dimensions(AppState *state, HWND hwnd);
 
-void track_uniques_desktops(AppState *state, HWNDTemp *tmp);
+void track_desktops(AppState *state, HWNDTemp *tmp);
 
 int initialize_state(AppState *state) {
-  HWNDTemp hwnd_buffer = {NULL, 0, 20};
-
-  hwnd_buffer.arr = (HWND *)malloc(sizeof(HWND) * hwnd_buffer.capacity);
-  if (hwnd_buffer.arr == NULL)
-    return 1;
-
-  EnumWindows(enum_callback, (LPARAM)&hwnd_buffer);
-
-  if (hwnd_buffer.counter > 0) {
-    initialize_dimensions(state, hwnd_buffer.arr[0]);
-  }
-
-  state->desktop_count = 0;
-  state->desktop_capacity = 9;
-  state->desktop_active_index = -1;
-  memset(state->desktop_list, 0, sizeof(state->desktop_list));
-
-  // Create an instance of the VirtualDesktopManager
   IVirtualDesktopManager *desktop_manager = NULL;
   HRESULT hr =
       CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
@@ -66,9 +48,25 @@ int initialize_state(AppState *state) {
     return 1;
   }
 
+  HWNDTemp hwnd_buffer = {NULL, 0, 20};
+  hwnd_buffer.arr = (HWND *)malloc(sizeof(HWND) * hwnd_buffer.capacity);
+  if (hwnd_buffer.arr == NULL)
+    return 1;
+
+  EnumWindows(enum_callback, (LPARAM)&hwnd_buffer);
+
+  if (hwnd_buffer.counter > 0) {
+    set_screen_dimensions(state, hwnd_buffer.arr[0]);
+  }
+
+  state->desktop_count = 0;
+  state->desktop_capacity = 9;
+  state->desktop_active_index = -1;
+  memset(state->desktop_list, 0, sizeof(state->desktop_list));
+
   state->desktop_manager = desktop_manager;
 
-  track_uniques_desktops(state, &hwnd_buffer);
+  track_desktops(state, &hwnd_buffer);
 
   state->desktop_active_index = -1;
   if (hwnd_buffer.counter > 0) {
@@ -78,8 +76,8 @@ int initialize_state(AppState *state) {
   return 0;
 }
 
-void sorted_insert(struct TrackedWindowNode **sorted_head_ref,
-                   struct TrackedWindowNode *new_node) {
+void insertion_sort(struct TrackedWindowNode **sorted_head_ref,
+                    struct TrackedWindowNode *new_node) {
   int new_node_score = get_window_position_score(new_node->data);
 
   if (*sorted_head_ref == NULL ||
@@ -99,7 +97,7 @@ void sorted_insert(struct TrackedWindowNode **sorted_head_ref,
   current->next = new_node;
 }
 
-void insertion_sort_list(struct TrackedWindowNode **head_ref) {
+void sort_linked_list(struct TrackedWindowNode **head_ref) {
   struct TrackedWindowNode *sorted = NULL;
 
   struct TrackedWindowNode *current = *head_ref;
@@ -110,14 +108,15 @@ void insertion_sort_list(struct TrackedWindowNode **head_ref) {
       ShowWindow(current->data, SW_SHOWNORMAL);
     }
 
-    sorted_insert(&sorted, current);
+    insertion_sort(&sorted, current);
     current = next_node;
   }
 
   *head_ref = sorted;
 }
 
-int layout_fibonacci(AppState *state) {
+// Fibonacci
+int apply_fibonacci_layout(AppState *state) {
   if (state->desktop_count == 0 || state->desktop_active_index == -1)
     return 0;
 
@@ -327,9 +326,11 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
     return TRUE;
 
   // OWNER CHECK: Skip child windows or helper worker utility panels
-  if (GetWindow(hwnd, GW_OWNER) != NULL) {
+  if (GetWindow(hwnd, GW_OWNER) != NULL)
     return TRUE;
-  }
+
+  if (should_exclude(hwnd))
+    return TRUE;
 
   if (temp->counter >= temp->capacity) {
     temp->capacity *= 2;
@@ -346,7 +347,7 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   return TRUE;
 }
 
-int initialize_dimensions(AppState *state, HWND hwnd) {
+int set_screen_dimensions(AppState *state, HWND hwnd) {
   MONITORINFO monitorInfo;
   monitorInfo.cbSize = sizeof(MONITORINFO);
 
@@ -439,7 +440,7 @@ int change_window_position(struct TrackedWindowNode *head, HWND hwnd, int y) {
   return 0;
 }
 
-void track_uniques_desktops(AppState *state, HWNDTemp *tmp) {
+void track_desktops(AppState *state, HWNDTemp *tmp) {
   for (int i = 0; i < tmp->counter; i++) {
     GUID buff;
     int found_id = get_desktop_id(tmp->arr[i], &buff, state->desktop_manager);

@@ -57,7 +57,7 @@ typedef struct {
   DWORD main_thread_id;
 } HotkeyThreadArgs;
 
-void insertion_sort_list(struct TrackedWindowNode **head_ref);
+void sort_linked_list(struct TrackedWindowNode **head_ref);
 
 DWORD WINAPI hotkey_tread_proc(LPVOID lpparam);
 void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
@@ -68,7 +68,7 @@ int initialize_state(AppState *state);
 
 int get_window_title(HWND hwnd, char *buff, int max);
 
-int layout_fibonacci(AppState *state);
+int apply_fibonacci_layout(AppState *state);
 
 HWINEVENTHOOK register_focus_hook();
 

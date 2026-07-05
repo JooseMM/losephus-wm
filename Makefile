@@ -1,7 +1,7 @@
 # 1. Compiler and Flags
 CC       = gcc
 CFLAGS   = -Wall -Wextra -std=c11 -O2 -Iinclude
-TARGET   = program.exe
+TARGET   = losephus.exe
 LIBS     = -luser32 -ldwmapi -luuid -lole32 
 
 # 2. Directories
