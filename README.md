@@ -51,7 +51,8 @@ The easiest way to build the project is by using GNU `make` paired with a GCC co
 To compile your source files, link dependencies, and instantly spin up the window manager program, run:
 ```bash
 make run
-
+```
 ### Running the Application
 ```bash
-losephus.exe
+./losephus.exe
+```
