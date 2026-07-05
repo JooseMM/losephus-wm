@@ -1,4 +1,4 @@
-# Windows Tiling Window Manager (wm-c)
+# Windows Tiling Window Manager (Losephus-WM)
 
 A lightweight, tiling window manager for Windows written natively in C. Utilizing the native Win32 API, Windows Hooks (`SetWinEventHook`), and Component Object Model (COM) interfaces, this project brings dynamic, keyboard-driven layout management—similar to Unix tools like `bspwm` or `i3wm`—directly to Windows.
 
