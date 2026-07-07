@@ -19,22 +19,7 @@
 
 #include "utils.h"
 
-#pragma comment(lib, "user32.lib") // If using MSVC
-
 int initialize_state(AppState *state) {
-  // Force Per-Monitor V2 Awareness via code fallback
-  // This removes the absolute requirement for an embedded manifest file on Win
-  // 10/11
-  HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-  if (hUser32) {
-    BOOL(WINAPI * pSetProcessDpiAwarenessContext)(HANDLE) =
-        (BOOL(WINAPI *)(HANDLE))GetProcAddress(hUser32,
-                                               "SetProcessDpiAwarenessContext");
-    if (pSetProcessDpiAwarenessContext) {
-      // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
-      pSetProcessDpiAwarenessContext((HANDLE)-4);
-    }
-  }
   IVirtualDesktopManager *desktop_manager = NULL;
   HRESULT hr =
       CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
@@ -225,6 +210,18 @@ void CALLBACK win_event_proc(
   case EVENT_OBJECT_DESTROY:
   case EVENT_SYSTEM_MINIMIZESTART: {
     stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+    break;
+  }
+  case EVENT_SYSTEM_FOREGROUND: {
+    GUID desktop_id;
+    if (get_desktop_id(hwnd, &desktop_id, GLOBAL_APP_STATE_PTR->desktop_manager) == 1)
+      break;
+
+    int found_index = find_tracked_desktop(GLOBAL_APP_STATE_PTR, &desktop_id);
+    if (found_index == -1)
+      break;
+
+    GLOBAL_APP_STATE_PTR->desktop_active_index = found_index;
     break;
   }
   }

@@ -19,4 +19,4 @@ int get_window_position_score(HWND hwnd);
 int get_desktop_id(HWND hwnd, GUID *buff, IVirtualDesktopManager *pDesktopManager);
 int set_screen_dimensions(AppState *state, HWND hwnd);
 void track_desktops(AppState *state, HWNDTemp *tmp);
-
+void print_all_titles(AppState *state);

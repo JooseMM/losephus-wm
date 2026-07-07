@@ -38,9 +38,7 @@ int main() {
 
   // Register for Windows Events
   HWINEVENTHOOK hEventHook = SetWinEventHook(
-      // SHOW: 0x8002 - MINIMIZEEND: 0x0017 - DESTROY: 0x8001 - MINIMIZESTART:
-      // 0x0016
-      EVENT_SYSTEM_MINIMIZESTART, EVENT_OBJECT_SHOW, NULL, win_event_proc, 0, 0,
+      EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_SHOW, NULL, win_event_proc, 0, 0,
       WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
   if (hEventHook == NULL) {
@@ -106,21 +104,46 @@ int main() {
     case WM_ACTION_FOCUS_DESKTOP_1: {
       if (state.desktop_count > 0)
         change_focus(state.desktop_list[0].window_head->data);
-
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_2: {
       if (state.desktop_count > 1)
         change_focus(state.desktop_list[1].window_head->data);
-
       break;
     }
-    // case WM_ACTION_RESET_STATE: {
-    //   if (reset_all(&state)) {
-    //     fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
-    //     CoUninitialize();
-    //   }
-    // }
+    case WM_ACTION_FOCUS_DESKTOP_3: {
+      if (state.desktop_count > 2)
+        change_focus(state.desktop_list[2].window_head->data);
+      break;
+    }
+    case WM_ACTION_FOCUS_DESKTOP_4: {
+      if (state.desktop_count > 3)
+        change_focus(state.desktop_list[3].window_head->data);
+      break;
+    }
+    case WM_ACTION_FOCUS_DESKTOP_5: {
+      if (state.desktop_count > 4)
+        change_focus(state.desktop_list[4].window_head->data);
+      break;
+    }
+
+    case WM_ACTION_FOCUS_DESKTOP_6: {
+      if (state.desktop_count > 5)
+        change_focus(state.desktop_list[5].window_head->data);
+      break;
+    }
+
+    case WM_ACTION_FOCUS_DESKTOP_7: {
+      if (state.desktop_count > 6)
+        change_focus(state.desktop_list[6].window_head->data);
+      break;
+    }
+
+    case WM_ACTION_FOCUS_DESKTOP_8: {
+      if (state.desktop_count > 7)
+        change_focus(state.desktop_list[7].window_head->data);
+      break;
+    }
     }
     // Windows Events are dispatched to WinEventProc here automatically
     TranslateMessage(&msg);
@@ -146,8 +169,6 @@ int register_hotkeys() {
     return 1;
   if (!RegisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL, MOD_ALT, 0x0D))
     return 1;
-  // if (!RegisterHotKey(NULL, WM_ACTION_RESET_STATE, MOD_ALT | MOD_SHIFT, 0x52))
-  //   return 1;
 
   // Window Reposition
   if (!RegisterHotKey(NULL, WM_ACTION_MOVE_UP, MOD_ALT | MOD_SHIFT, 0x4B))
@@ -160,6 +181,27 @@ int register_hotkeys() {
     return 1;
 
   if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_2, MOD_ALT, 0x32))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_3, MOD_ALT, 0x33))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_4, MOD_ALT, 0x34))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_5, MOD_ALT, 0x35))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_6, MOD_ALT, 0x36))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_7, MOD_ALT, 0x37))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_8, MOD_ALT, 0x38))
+    return 1;
+
+  if (!RegisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_9, MOD_ALT, 0x39))
     return 1;
 
   return 0;
@@ -175,4 +217,11 @@ void unregister_hotkeys() {
   UnregisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL);
   UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_1);
   UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_2);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_3);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_4);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_5);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_6);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_7);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_8);
+  UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_9);
 }

@@ -244,3 +244,16 @@ void track_desktops(AppState *state, HWNDTemp *tmp) {
     }
   }
 }
+
+void print_all_titles(AppState *state) {
+    for(int i = 0; i < state->desktop_count; i++) {
+	struct TrackedWindowNode *current = state->desktop_list[i].window_head;
+	while(current != NULL) {
+	    char buff[1000];
+	    if(get_window_title(current->data, buff, 1000) == 0) {
+		printf("Title: %s\n", buff);
+	    }
+	    current = current->next;
+	}
+    }
+}
