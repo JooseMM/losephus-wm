@@ -1,3 +1,6 @@
+#ifndef WM_H
+#define WM_H
+
 #include "windef.h"
 #include <minwindef.h>
 #include <shobjidl.h>
@@ -64,7 +67,7 @@ typedef struct {
   DWORD main_thread_id;
 } HotkeyThreadArgs;
 
-void sort_linked_list(struct TrackedWindowNode **head_ref);
+void sort_linked_list(AppState *state);
 
 DWORD WINAPI hotkey_tread_proc(LPVOID lpparam);
 void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
@@ -99,3 +102,5 @@ int open_terminal();
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam);
 
 int reset_all(AppState *state);
+
+#endif 

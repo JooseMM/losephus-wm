@@ -1,4 +1,5 @@
 #include "wm.h"
+#include "utils.h"
 
 #include <dwmapi.h>
 #include <errhandlingapi.h>
@@ -56,9 +57,12 @@ int main() {
   while (GetMessage(&msg, NULL, 0, 0)) {
     switch (msg.wParam) {
     case WM_ACTION_ORGANIZE:
-      VirtualDesktop vd = state.desktop_list[state.desktop_active_index];
-      sort_linked_list(&vd.window_head);
+      printf("Starting\n");
+      print_all_titles(&state);
+      sort_linked_list(&state);
       apply_fibonacci_layout(&state);
+      printf("Ending\n");
+      print_all_titles(&state);
       break;
     case WM_ACTION_KILL_WINDOW:
       HWND current_focus = GetForegroundWindow();
@@ -102,13 +106,15 @@ int main() {
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_1: {
-      if (state.desktop_count > 0)
+      if (state.desktop_count > 0) {
         change_focus(state.desktop_list[0].window_head->data);
+      }
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_2: {
-      if (state.desktop_count > 1)
+      if (state.desktop_count > 1) {
         change_focus(state.desktop_list[1].window_head->data);
+      }
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_3: {

@@ -1,16 +1,16 @@
-#include <stdio.h>
 #include <combaseapi.h>
 #include <initguid.h>
+#include <shlwapi.h>
 #include <shobjidl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unknwn.h>
 #include <windef.h>
 #include <winnt.h>
-#include <shlwapi.h>
 
 #include "utils.h"
 
-#define EXCLUDE_LIST_COUNT 2
+#define EXCLUDE_LIST_COUNT 3
 
 int start_tracking_window(VirtualDesktop *vd, HWND hwnd) {
   struct TrackedWindowNode *newNode =
@@ -30,6 +30,8 @@ int start_tracking_window(VirtualDesktop *vd, HWND hwnd) {
 
   struct TrackedWindowNode *current = vd->window_head;
   while (current->next != NULL) {
+    if (current->data == hwnd)
+      return 0;
     current = current->next;
   }
 
@@ -107,20 +109,22 @@ int reset_all(AppState *state) {
 }
 
 int should_exclude(HWND hwnd) {
- char exclude_list[EXCLUDE_LIST_COUNT][255] = { 
-  "Picture in Picture",
-  "Picture-in-Picture"
- };
- char buff[500];
+  char exclude_list[EXCLUDE_LIST_COUNT][255] = {
+      "Picture in Picture",
+      "Picture-in-Picture",
+      "Imagen con imagen incrustada",
+  };
+  char buff[500];
 
- if(get_window_title(hwnd, buff, 500) == 1)
-   return 1;
+  if (get_window_title(hwnd, buff, 500) == 1)
+    return 1;
 
- for(int i = 0; i < EXCLUDE_LIST_COUNT; i++) {
-  if(StrStrIA(exclude_list[i], buff) != NULL) return 1;
- }
+  for (int i = 0; i < EXCLUDE_LIST_COUNT; i++) {
+    if (StrStrIA(exclude_list[i], buff) != NULL)
+      return 1;
+  }
 
- return 0;
+  return 0;
 }
 
 int is_window_usable(HWND wtarget) {
@@ -246,14 +250,17 @@ void track_desktops(AppState *state, HWNDTemp *tmp) {
 }
 
 void print_all_titles(AppState *state) {
-    for(int i = 0; i < state->desktop_count; i++) {
-	struct TrackedWindowNode *current = state->desktop_list[i].window_head;
-	while(current != NULL) {
-	    char buff[1000];
-	    if(get_window_title(current->data, buff, 1000) == 0) {
-		printf("Title: %s\n", buff);
-	    }
-	    current = current->next;
-	}
+  for (int i = 0; i < state->desktop_count; i++) {
+    struct TrackedWindowNode *current = state->desktop_list[i].window_head;
+    printf("Desktop #%d\n", i + 1);
+    while (current != NULL) {
+      char buff[1000];
+      if (get_window_title(current->data, buff, 1000) == 0) {
+        printf("Title: %s\n", buff);
+      } else {
+        printf("Error\n");
+      }
+      current = current->next;
     }
+  }
 }

@@ -1,3 +1,6 @@
+#ifndef UTILS_H
+#define UTILS_H
+
 #include "wm.h"
 #include <windef.h>
 #include <winnt.h>
@@ -20,3 +23,5 @@ int get_desktop_id(HWND hwnd, GUID *buff, IVirtualDesktopManager *pDesktopManage
 int set_screen_dimensions(AppState *state, HWND hwnd);
 void track_desktops(AppState *state, HWNDTemp *tmp);
 void print_all_titles(AppState *state);
+
+#endif

@@ -59,43 +59,45 @@ int initialize_state(AppState *state) {
   return 0;
 }
 
-void insertion_sort(struct TrackedWindowNode **sorted_head_ref,
-                    struct TrackedWindowNode *new_node) {
-  int new_node_score = get_window_position_score(new_node->data);
+void sort_linked_list(AppState *state) {
+  // 1. Get a POINTER to the desktop so modifications persist
+  VirtualDesktop *vd = &state->desktop_list[state->desktop_active_index];
 
-  if (*sorted_head_ref == NULL ||
-      get_window_position_score((*sorted_head_ref)->data) >= new_node_score) {
-    new_node->next = *sorted_head_ref;
-    *sorted_head_ref = new_node;
-    return;
-  }
-
-  struct TrackedWindowNode *current = *sorted_head_ref;
-  while (current->next != NULL &&
-         get_window_position_score(current->next->data) < new_node_score) {
-    current = current->next;
-  }
-
-  new_node->next = current->next;
-  current->next = new_node;
-}
-
-void sort_linked_list(struct TrackedWindowNode **head_ref) {
   struct TrackedWindowNode *sorted = NULL;
+  struct TrackedWindowNode *current_unsorted = vd->window_head;
 
-  struct TrackedWindowNode *current = *head_ref;
-  while (current != NULL) {
-    struct TrackedWindowNode *next_node = current->next;
-
-    if (IsZoomed(current->data)) {
-      ShowWindow(current->data, SW_SHOWNORMAL);
+  while (current_unsorted != NULL) {
+    // Un-zoom windows if necessary
+    if (IsZoomed(current_unsorted->data)) {
+      ShowWindow(current_unsorted->data, SW_SHOWNORMAL);
     }
 
-    insertion_sort(&sorted, current);
-    current = next_node;
-  }
+    struct TrackedWindowNode *next_unsorted = current_unsorted->next;
 
-  *head_ref = sorted;
+    int current_score = get_window_position_score(current_unsorted->data);
+
+    struct TrackedWindowNode *prev = NULL;
+    struct TrackedWindowNode *current_sorted = sorted;
+
+    while (current_sorted != NULL &&
+           get_window_position_score(current_sorted->data) < current_score) {
+      prev = current_sorted;
+      current_sorted = current_sorted->next;
+    }
+
+    if (prev == NULL) {
+      // Inserting at the very beginning of the sorted list
+      current_unsorted->next = sorted;
+      sorted = current_unsorted;
+    } else {
+      // Inserting in the middle or at the end
+      current_unsorted->next = current_sorted;
+      prev->next = current_unsorted;
+    }
+
+    current_unsorted = next_unsorted;
+  }
+  vd->window_head = sorted;
 }
 
 // Fibonacci
@@ -213,8 +215,10 @@ void CALLBACK win_event_proc(
     break;
   }
   case EVENT_SYSTEM_FOREGROUND: {
+    print_all_titles(GLOBAL_APP_STATE_PTR);
     GUID desktop_id;
-    if (get_desktop_id(hwnd, &desktop_id, GLOBAL_APP_STATE_PTR->desktop_manager) == 1)
+    if (get_desktop_id(hwnd, &desktop_id,
+                       GLOBAL_APP_STATE_PTR->desktop_manager) == 1)
       break;
 
     int found_index = find_tracked_desktop(GLOBAL_APP_STATE_PTR, &desktop_id);
@@ -222,6 +226,7 @@ void CALLBACK win_event_proc(
       break;
 
     GLOBAL_APP_STATE_PTR->desktop_active_index = found_index;
+    print_all_titles(GLOBAL_APP_STATE_PTR);
     break;
   }
   }
