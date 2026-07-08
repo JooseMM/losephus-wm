@@ -10,8 +10,6 @@
 
 #include "utils.h"
 
-#define EXCLUDE_LIST_COUNT 3
-
 int start_tracking_window(VirtualDesktop *vd, HWND hwnd) {
   struct TrackedWindowNode *newNode =
       (struct TrackedWindowNode *)malloc(sizeof(struct TrackedWindowNode));
@@ -53,16 +51,16 @@ int stop_tracking_window(AppState *state, HWND hwnd) {
     return -1;
 
   for (int i = 0; i < state->desktop_count; i++) {
-    VirtualDesktop vd = state->desktop_list[i];
+    VirtualDesktop *vd = &state->desktop_list[i];
 
-    if (vd.window_count == 0)
+    if (vd->window_count == 0)
       continue;
 
-    struct TrackedWindowNode *current = vd.window_head;
-    if (vd.window_head->data == hwnd) {
-      vd.window_head = vd.window_head->next;
+    struct TrackedWindowNode *current = vd->window_head;
+    if (vd->window_head->data == hwnd) {
+      vd->window_head = vd->window_head->next;
       free(current);
-      vd.window_count--;
+      vd->window_count--;
       return 0;
     }
 
@@ -71,6 +69,7 @@ int stop_tracking_window(AppState *state, HWND hwnd) {
         struct TrackedWindowNode *tmp = current->next;
         current->next = current->next->next;
         free(tmp);
+        vd->window_count--;
         return 0;
       }
       current = current->next;
@@ -233,8 +232,7 @@ void track_desktops(AppState *state, HWNDTemp *tmp) {
           1) {
         printf("OS is unable to give the necessary memory for allocation\n");
       }
-    } else if (index_of == -1 &&
-               state->desktop_count < state->desktop_capacity) {
+    } else if (index_of == -1 && state->desktop_count < DESKTOP_LIST_CAPACITY) {
       state->desktop_list[state->desktop_count] =
           (VirtualDesktop){buff, NULL, 0};
       ;
@@ -255,11 +253,11 @@ void print_all_titles(AppState *state) {
     printf("Desktop #%d\n", i + 1);
     while (current != NULL) {
       char buff[1000];
-      if (get_window_title(current->data, buff, 1000) == 0) {
-        printf("Title: %s\n", buff);
-      } else {
-        printf("Error\n");
+      if (get_window_title(current->data, buff, 1000)) {
+	printf("Failed to get the title. Error: %lu\n", GetLastError());
+        return;
       }
+      printf("Title: %s\n", buff);
       current = current->next;
     }
   }

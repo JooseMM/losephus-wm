@@ -5,6 +5,8 @@
 #include <windef.h>
 #include <winnt.h>
 
+#define EXCLUDE_LIST_COUNT 3
+
 typedef struct {
   HWND *arr;
   int counter;

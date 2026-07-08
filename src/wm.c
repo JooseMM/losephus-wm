@@ -43,7 +43,6 @@ int initialize_state(AppState *state) {
   }
 
   state->desktop_count = 0;
-  state->desktop_capacity = 9;
   state->desktop_active_index = -1;
   memset(state->desktop_list, 0, sizeof(state->desktop_list));
 
@@ -190,13 +189,16 @@ void CALLBACK win_event_proc(
   switch (event) {
   case EVENT_OBJECT_SHOW:
   case EVENT_SYSTEM_MINIMIZEEND: {
+    printf("[START]: EVENT_SYSTEM_MINIMIZEEND|EVENT_OBJECT_SHOW\n");
     if (GetParent(hwnd) == NULL && is_window_usable(hwnd)) {
-      Sleep(20); // sleep to allow the OS to catch up
+      Sleep(20); 
+
       GUID desktop_id;
       if (get_desktop_id(hwnd, &desktop_id,
                          GLOBAL_APP_STATE_PTR->desktop_manager) == 1) {
         break;
       }
+
       int found_index = find_tracked_desktop(GLOBAL_APP_STATE_PTR, &desktop_id);
       if (found_index == -1) {
         break;
@@ -207,15 +209,20 @@ void CALLBACK win_event_proc(
         break;
       }
     }
+    printf("[END]: EVENT_SYSTEM_MINIMIZEEND|EVENT_OBJECT_SHOW\n");
     break;
   }
   case EVENT_OBJECT_DESTROY:
   case EVENT_SYSTEM_MINIMIZESTART: {
+    printf("[START]: EVENT_OBJECT_DESTROY|EVENT_SYSTEM_MINIMIZESTART\n");
+    print_all_titles(GLOBAL_APP_STATE_PTR);
     stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+    printf("[END]: EVENT_OBJECT_DESTROY|EVENT_SYSTEM_MINIMIZESTART\n");
+    print_all_titles(GLOBAL_APP_STATE_PTR);
     break;
   }
   case EVENT_SYSTEM_FOREGROUND: {
-    print_all_titles(GLOBAL_APP_STATE_PTR);
+    printf("[START]: EVENT_SYSTEM_FOREGROUND\n");
     GUID desktop_id;
     if (get_desktop_id(hwnd, &desktop_id,
                        GLOBAL_APP_STATE_PTR->desktop_manager) == 1)
@@ -226,7 +233,7 @@ void CALLBACK win_event_proc(
       break;
 
     GLOBAL_APP_STATE_PTR->desktop_active_index = found_index;
-    print_all_titles(GLOBAL_APP_STATE_PTR);
+    printf("[END]: EVENT_SYSTEM_FOREGROUND\n");
     break;
   }
   }

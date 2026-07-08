@@ -6,6 +6,8 @@
 #include <shobjidl.h>
 #include <windows.h>
 
+#define DESKTOP_LIST_CAPACITY 9
+
 struct TrackedWindowNode {
   HWND data;
   struct TrackedWindowNode *next;
@@ -21,7 +23,6 @@ typedef struct {
   IVirtualDesktopManager *desktop_manager;
   VirtualDesktop desktop_list[9];
   int desktop_count;
-  int desktop_capacity;
   int desktop_active_index;
 
   float screen_width;

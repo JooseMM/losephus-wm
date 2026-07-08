@@ -57,12 +57,8 @@ int main() {
   while (GetMessage(&msg, NULL, 0, 0)) {
     switch (msg.wParam) {
     case WM_ACTION_ORGANIZE:
-      printf("Starting\n");
-      print_all_titles(&state);
       sort_linked_list(&state);
       apply_fibonacci_layout(&state);
-      printf("Ending\n");
-      print_all_titles(&state);
       break;
     case WM_ACTION_KILL_WINDOW:
       HWND current_focus = GetForegroundWindow();
