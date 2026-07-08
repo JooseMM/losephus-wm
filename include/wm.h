@@ -89,7 +89,7 @@ int track_virtual_desktop(AppState *state, HWND hwnd);
 
 int focus_to_title(AppState *state, char *title);
 
-void change_focus(HWND hwnd);
+void change_desktop_focus(AppState *state, int desktop_index);
 
 int get_desktop_id(HWND hwnd, GUID *buff,
                    IVirtualDesktopManager *pDesktopManager);

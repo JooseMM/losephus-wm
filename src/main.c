@@ -1,5 +1,4 @@
 #include "wm.h"
-#include "utils.h"
 
 #include <dwmapi.h>
 #include <errhandlingapi.h>
@@ -102,48 +101,38 @@ int main() {
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_1: {
-      if (state.desktop_count > 0) {
-        change_focus(state.desktop_list[0].window_head->data);
-      }
+      change_desktop_focus(&state, 0);
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_2: {
-      if (state.desktop_count > 1) {
-        change_focus(state.desktop_list[1].window_head->data);
-      }
+      change_desktop_focus(&state, 1);
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_3: {
-      if (state.desktop_count > 2)
-        change_focus(state.desktop_list[2].window_head->data);
+      change_desktop_focus(&state, 2);
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_4: {
-      if (state.desktop_count > 3)
-        change_focus(state.desktop_list[3].window_head->data);
+      change_desktop_focus(&state, 3);
       break;
     }
     case WM_ACTION_FOCUS_DESKTOP_5: {
-      if (state.desktop_count > 4)
-        change_focus(state.desktop_list[4].window_head->data);
+      change_desktop_focus(&state, 4);
       break;
     }
 
     case WM_ACTION_FOCUS_DESKTOP_6: {
-      if (state.desktop_count > 5)
-        change_focus(state.desktop_list[5].window_head->data);
+      change_desktop_focus(&state, 5);
       break;
     }
 
     case WM_ACTION_FOCUS_DESKTOP_7: {
-      if (state.desktop_count > 6)
-        change_focus(state.desktop_list[6].window_head->data);
+      change_desktop_focus(&state, 6);
       break;
     }
 
     case WM_ACTION_FOCUS_DESKTOP_8: {
-      if (state.desktop_count > 7)
-        change_focus(state.desktop_list[7].window_head->data);
+      change_desktop_focus(&state, 7);
       break;
     }
     }
