@@ -25,5 +25,5 @@ int get_desktop_id(HWND hwnd, GUID *buff, IVirtualDesktopManager *pDesktopManage
 int set_screen_dimensions(AppState *state, HWND hwnd);
 void track_desktops(AppState *state, HWNDTemp *tmp);
 void print_all_titles(AppState *state);
-
+void handle_window_desktop_change(HWND hwnd);
 #endif

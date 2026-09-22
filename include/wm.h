@@ -75,7 +75,7 @@ void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event,
                              HWND hwnd, LONG idObject, LONG idChild,
                              DWORD dwEventThread, DWORD dwmsEventTime);
 
-int initialize_state(AppState *state);
+int initialize_state(AppState *state, IVirtualDesktopManager *desktop_manager);
 
 int get_window_title(HWND hwnd, char *buff, int max);
 

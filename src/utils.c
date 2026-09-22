@@ -40,7 +40,7 @@ int start_tracking_window(VirtualDesktop *vd, HWND hwnd) {
 
 int find_tracked_desktop(AppState *state, GUID *id) {
   for (int i = 0; i < state->desktop_count; i++) {
-    if (IsEqualGUID(id, &state->desktop_list[i]))
+    if (IsEqualGUID(id, &state->desktop_list[i].desktop_id))
       return i;
   }
   return -1;
@@ -221,7 +221,7 @@ void track_desktops(AppState *state, HWNDTemp *tmp) {
 
     int index_of = -1;
     for (int x = 0; x < state->desktop_count; x++) {
-      if (IsEqualGUID(&buff, &state->desktop_list[x])) {
+      if (IsEqualGUID(&buff, &state->desktop_list[x].desktop_id)) {
         index_of = x;
         break;
       }
@@ -235,7 +235,6 @@ void track_desktops(AppState *state, HWNDTemp *tmp) {
     } else if (index_of == -1 && state->desktop_count < DESKTOP_LIST_CAPACITY) {
       state->desktop_list[state->desktop_count] =
           (VirtualDesktop){buff, NULL, 0};
-      ;
 
       if (start_tracking_window(&state->desktop_list[state->desktop_count],
                                 tmp->arr[i]) == 1) {
@@ -247,6 +246,46 @@ void track_desktops(AppState *state, HWNDTemp *tmp) {
   }
 }
 
+void handle_window_desktop_change(HWND hwnd) {
+  char title_buff[1000];
+  get_window_title(hwnd, title_buff, 1000);
+
+  BOOL is_active_on_virtual_desktop = FALSE;
+
+  HRESULT hr = GLOBAL_APP_STATE_PTR->desktop_manager->lpVtbl
+                   ->IsWindowOnCurrentVirtualDesktop(
+                       GLOBAL_APP_STATE_PTR->desktop_manager, hwnd,
+                       &is_active_on_virtual_desktop);
+
+  if (FAILED(hr) || is_active_on_virtual_desktop)
+    return;
+
+  GUID desktop_id_buff;
+  int is_err = get_desktop_id(hwnd, &desktop_id_buff,
+                              GLOBAL_APP_STATE_PTR->desktop_manager);
+  if (is_err) {
+    printf("Unable to get the Desktop ID.\n");
+    return;
+  }
+
+  /* Remove the previous tracking node */
+  stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+
+  VirtualDesktop *target_desktop = NULL;
+  for (int i = 0; i < GLOBAL_APP_STATE_PTR->desktop_count; i++) {
+    if (IsEqualGUID(&desktop_id_buff,
+                    &GLOBAL_APP_STATE_PTR->desktop_list[i].desktop_id)) {
+      target_desktop = &GLOBAL_APP_STATE_PTR->desktop_list[i];
+      break;
+    }
+  }
+
+  if (target_desktop != NULL)
+    start_tracking_window(target_desktop, hwnd);
+
+  printf("title: %s -> is in another virtual desktop\n", title_buff);
+}
+
 void print_all_titles(AppState *state) {
   for (int i = 0; i < state->desktop_count; i++) {
     struct TrackedWindowNode *current = state->desktop_list[i].window_head;
@@ -254,7 +293,7 @@ void print_all_titles(AppState *state) {
     while (current != NULL) {
       char buff[1000];
       if (get_window_title(current->data, buff, 1000)) {
-	printf("Failed to get the title. Error: %lu\n", GetLastError());
+        printf("Failed to get the title. Error: %lu\n", GetLastError());
         return;
       }
       printf("Title: %s\n", buff);

@@ -19,18 +19,7 @@
 
 #include "utils.h"
 
-int initialize_state(AppState *state) {
-  IVirtualDesktopManager *desktop_manager = NULL;
-  HRESULT hr =
-      CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
-                       &IID_IVirtualDesktopManager, (void **)&desktop_manager);
-
-  if (!SUCCEEDED(hr)) {
-    printf("Failed to create IVirtualDesktopManager instance. Error: 0x%08lX\n",
-           hr);
-    return 1;
-  }
-
+int initialize_state(AppState *state, IVirtualDesktopManager *desktop_manager) {
   HWNDTemp hwnd_buffer = {NULL, 0, 20};
   hwnd_buffer.arr = (HWND *)malloc(sizeof(HWND) * hwnd_buffer.capacity);
   if (hwnd_buffer.arr == NULL)
@@ -189,8 +178,8 @@ void CALLBACK win_event_proc(
   switch (event) {
   case EVENT_OBJECT_SHOW:
   case EVENT_SYSTEM_MINIMIZEEND: {
-    printf("[START]: EVENT_SYSTEM_MINIMIZEEND|EVENT_OBJECT_SHOW\n");
-    print_all_titles(GLOBAL_APP_STATE_PTR);
+    // printf("[START]: EVENT_SYSTEM_MINIMIZEEND|EVENT_OBJECT_SHOW\n");
+
     if (GetParent(hwnd) == NULL && is_window_usable(hwnd)) {
       Sleep(20);
 
@@ -211,13 +200,24 @@ void CALLBACK win_event_proc(
         break;
       }
     }
-    printf("[END]: EVENT_SYSTEM_MINIMIZEEND|EVENT_OBJECT_SHOW\n");
-    print_all_titles(GLOBAL_APP_STATE_PTR);
+    // printf("[END]: EVENT_SYSTEM_MINIMIZEEND|EVENT_OBJECT_SHOW\n");
+    // print_all_titles(GLOBAL_APP_STATE_PTR);
     break;
   }
   case EVENT_OBJECT_DESTROY:
   case EVENT_SYSTEM_MINIMIZESTART: {
     stop_tracking_window(GLOBAL_APP_STATE_PTR, hwnd);
+    break;
+  }
+  case EVENT_OBJECT_CLOAKED: {
+    if (!is_window_usable(hwnd) || GetWindow(hwnd, GW_OWNER) != NULL ||
+        should_exclude(hwnd))
+      break;
+
+    printf("[START]: EVENT_OBJECT_CLOAKED\n");
+    handle_window_desktop_change(hwnd);
+    printf("[END]: EVENT_OBJECT_CLOAKED\n");
+
     break;
   }
   case EVENT_SYSTEM_FOREGROUND: {
@@ -239,41 +239,15 @@ void CALLBACK win_event_proc(
 void change_desktop_focus(AppState *state, int desktop_index) {
   if (state->desktop_count <= desktop_index ||
       state->desktop_list[desktop_index].window_head == NULL) {
-      // update this to debug
     return;
   }
 
   HWND hwnd = state->desktop_list[desktop_index].window_head->data;
 
-  // Get the thread that currently "owns" the foreground
-  HWND currentForeground = GetForegroundWindow();
-  DWORD foregroundThreadId =
-      currentForeground ? GetWindowThreadProcessId(currentForeground, NULL) : 0;
-
-  // Get our own thread ID
-  DWORD myThreadId = GetCurrentThreadId();
-
-  // If we aren't the foreground thread, we must "attach" to it to steal focus
-  // rights
-  if (foregroundThreadId != myThreadId && foregroundThreadId != 0) {
-    AttachThreadInput(foregroundThreadId, myThreadId, TRUE);
-
-    // Bring window to top and force focus
-    BringWindowToTop(hwnd);
-    SetForegroundWindow(hwnd);
-    SetFocus(hwnd);
-
-    // Detach
-    AttachThreadInput(foregroundThreadId, myThreadId, FALSE);
-  } else {
-    // We already have foreground rights
-    BringWindowToTop(hwnd);
-    SetForegroundWindow(hwnd);
-    SetFocus(hwnd);
-  }
+  BringWindowToTop(hwnd);
+  SetForegroundWindow(hwnd);
+  SetFocus(hwnd);
 }
-
-/* utils */
 
 BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   HWNDTemp *temp = (HWNDTemp *)lparam;
@@ -281,7 +255,6 @@ BOOL CALLBACK enum_callback(HWND hwnd, LPARAM lparam) {
   if (!is_window_usable(hwnd))
     return TRUE;
 
-  // OWNER CHECK: Skip child windows or helper worker utility panels
   if (GetWindow(hwnd, GW_OWNER) != NULL)
     return TRUE;
 

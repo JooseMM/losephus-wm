@@ -21,7 +21,18 @@ int main() {
     return 1;
   }
 
-  if (initialize_state(&state) == 1) {
+  IVirtualDesktopManager *desktop_manager = NULL;
+  hr =
+      CoCreateInstance(&CLSID_VirtualDesktopManager, NULL, CLSCTX_INPROC_SERVER,
+                       &IID_IVirtualDesktopManager, (void **)&desktop_manager);
+
+  if (!SUCCEEDED(hr)) {
+    printf("Failed to create IVirtualDesktopManager instance. Error: 0x%08lX\n",
+           hr);
+    return 1;
+  }
+
+  if (initialize_state(&state, desktop_manager) == 1) {
     fprintf(stderr, "[Main] Initialization error. %lu\n", GetLastError());
     CoUninitialize();
     return 1;
@@ -38,13 +49,13 @@ int main() {
 
   // Register for Windows Events
   HWINEVENTHOOK hEventHook = SetWinEventHook(
-      EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_SHOW, NULL, win_event_proc, 0, 0,
+      EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_CLOAKED, NULL, win_event_proc, 0, 0,
       WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
   if (hEventHook == NULL) {
     fprintf(stderr, "[Main] WinEventHook registration failed. %lu\n",
             GetLastError());
-    UnregisterHotKey(NULL, WM_ACTION_QUIT);
+    unregister_hotkeys();
     CoUninitialize();
     return 1;
   }
@@ -145,7 +156,6 @@ int main() {
   state.desktop_manager->lpVtbl->Release(state.desktop_manager);
   unregister_hotkeys();
   UnhookWinEvent(hEventHook);
-  UnregisterHotKey(NULL, WM_ACTION_QUIT);
   CoUninitialize();
 
   return 0;
@@ -204,7 +214,6 @@ void unregister_hotkeys() {
   UnregisterHotKey(NULL, WM_ACTION_KILL_WINDOW);
   UnregisterHotKey(NULL, WM_ACTION_MOVE_DOWN);
   UnregisterHotKey(NULL, WM_ACTION_MOVE_UP);
-  // UnregisterHotKey(NULL, WM_ACTION_RESET_STATE);
   UnregisterHotKey(NULL, WM_ACTION_OPEN_TERMINAL);
   UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_1);
   UnregisterHotKey(NULL, WM_ACTION_FOCUS_DESKTOP_2);
